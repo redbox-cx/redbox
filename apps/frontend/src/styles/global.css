@@ -1,0 +1,306 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap');
+
+:root {
+    --color-bg: #ffffff;
+    --color-surface: #f2f2f2;
+    --color-inactive: #9c9c9c9c;
+    --color-primary: #951d2a;
+    --color-contrast: #2b2732;
+    --color-text: #000000;
+    --color-shadow: rgba(0,0,0,0.15);
+    --color-card-hover: #e0e0e0;
+}
+
+body {
+    font-family: 'Montserrat', sans-serif;
+    margin: 0;
+}
+
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
+}
+
+.nav-group-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.nav-group-right {
+    display: flex;
+    align-items: center;
+    z-index: 3000;
+}
+
+/* --- Desktop Menu --- */
+.menu-container {
+    display: flex;
+    list-style: none;
+    background-color: var(--color-surface);
+    padding: 0 12px;
+    border-radius: 10px;
+    margin: 0;
+}
+
+.menu-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.menu-item a {
+    text-decoration: none;
+    color: var(--color-text);
+    font-weight: 500;
+    font-size: 1.0rem;
+    transition: color 0.5s ease;
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+}
+
+/* Main menu dimming logic */
+.menu-container:has(.menu-item:hover) .menu-item > a {
+    color: var(--color-inactive);
+}
+
+.menu-item:hover > a {
+    color: var(--color-text) !important;
+}
+
+/* --- Submenu --- */
+.submenu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 12px;
+    min-width: 280px;
+    background-color: var(--color-surface);
+    padding: 10px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 15px 35px var(--color-shadow);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.2s ease;
+    z-index: 100;
+}
+
+.submenu::before {
+    content: "";
+    position: absolute;
+    top: -12px;
+    left: 0;
+    width: 100%;
+    height: 12px;
+}
+
+.menu-item:hover .submenu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.submenu-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background-color: transparent;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--color-text);
+    transition: all 0.2s ease;
+}
+
+/* Submenu dimming logic */
+.submenu:has(.submenu-card:hover) .submenu-card:not(:hover) {
+    color: var(--color-inactive);
+}
+
+.submenu-card:hover {
+    background-color: #ffffff;
+    transform: translateX(4px);
+}
+
+.submenu-icon {
+    background-color: var(--color-primary);
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.submenu-icon img {
+    filter: brightness(0) invert(1);
+    width: 24px;
+    height: 24px;
+}
+
+/* --- Buttons --- */
+.login-btn {
+    background-color: var(--color-contrast);
+    color: white;
+    padding: 12px 28px;
+    border-radius: 12px;
+    border: none;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.login-btn:hover {
+    background-color: var(--color-primary);
+}
+
+/* --- Chevron --- */
+.bi-chevron-down {
+    transition: transform 0.3s ease;
+    transform: rotate(0deg);
+}
+
+.menu-item:hover .bi-chevron-down, 
+.chevron-icon.active .bi-chevron-down {
+    transform: rotate(180deg);
+}
+
+.chevron-icon {
+    display: flex;
+    align-items: center;
+    margin-left: 8px;
+}
+
+/* --- Hamburger --- */
+.hamburger {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    margin-left: 15px;
+}
+
+.line {
+    width: 28px;
+    height: 3px;
+    background-color: var(--color-contrast);
+    border-radius: 2px;
+    transition: 0.3s;
+}
+
+.mobile-login-btn {
+    display: none;
+}
+
+.logo-text {
+    display: none;
+    font-weight: 600;
+    font-size: 1.3rem;
+    color: var(--color-contrast);
+    letter-spacing: -0.5px;
+    text-decoration: none;
+}
+
+.logo-link {
+    font-weight: 600;
+    font-size: 1.3rem;
+    color: var(--color-contrast);
+    letter-spacing: -0.5px;
+    text-decoration: none;
+}
+
+.logo-text .dot {
+    color: var(--color-primary);
+}
+
+/* --- Mobile Logic --- */
+@media (max-width: 900px) {
+    .desktop-login { display: none; }
+    .hamburger { display: flex; }
+
+    .hamburger.active .line:nth-child(1) { transform: translateY(9px) rotate(45deg); }
+    .hamburger.active .line:nth-child(2) { opacity: 0; }
+    .hamburger.active .line:nth-child(3) { transform: translateY(-9px) rotate(-45deg); }
+
+    .menu-wrapper {
+        position: fixed;
+        top: 0;
+        right: -100%;
+        width: 300px;
+        height: 100vh;
+        height: 100dvh;
+        background-color: white;
+        display: flex;
+        flex-direction: column;
+        transition: 0.4s ease-in-out;
+        z-index: 1500;
+        box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+    }
+
+    .menu-wrapper.open { right: 0; }
+
+    .menu-scroll-area {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+
+        padding: 80px 0 20px 0;
+    }
+
+    .menu-container {
+        flex-direction: column;
+        background: none;
+        padding: 0;
+        width: 100%;
+    }
+
+    .menu-item { width: 100%; flex-direction: column; align-items: flex-start; }
+    .menu-item a { width: 100%; border-bottom: 1px solid #f0f0f0; padding: 20px; box-sizing: border-box; }
+
+    .submenu {
+        position: static;
+        margin-top: 0;
+        width: 100%;
+        display: none;
+        opacity: 1;
+        visibility: visible;
+        box-shadow: none;
+        transform: none;
+        background-color: #fafafa;
+        padding: 10px 20px;
+    }
+
+    .submenu.mobile-show { display: flex; }
+
+    .mobile-login-btn {
+        display: block;
+        width: 100%;
+        background-color: var(--color-contrast);
+        color: white;
+        padding: 25px;
+        border: none;
+        font-family: 'Montserrat', sans-serif;
+        font-weight: 600;
+        font-size: 1.1rem;
+        border-radius: 0;
+        cursor: pointer;
+    }
+
+    .logo-text {
+        display: block;
+    }
+}
