@@ -1,9 +1,19 @@
-import { Navbar } from "../components/Navbar";
+
+import { Footer } from "../components/Footer";
+import { Hero } from "../components/Hero";
+import { MainLayout } from "../components/MainLayout";
+import { Services } from "../components/Services";
 
 export function Home(){
     return(
         <>
-            <Navbar />
+           <MainLayout>
+            <>
+            <Hero />
+            <Services />
+            </>
+           </MainLayout>
+           <Footer />
         </>
     );
 }
