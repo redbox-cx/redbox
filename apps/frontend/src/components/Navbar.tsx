@@ -74,7 +74,6 @@ export function Navbar() {
 
     return (
         <nav className="navbar">
-            <a>
             <div className="nav-group-left">
                 <a href="/" className="logo-link">
                     <div className="nav-group-left">
@@ -84,9 +83,8 @@ export function Navbar() {
                 </a>
                 <Menu isOpen={isOpen} setIsOpen={setIsOpen} />
             </div>
-            </a>
             <div className="nav-group-right">
-                <button className="login-btn desktop-login">Login</button>
+                    <a href="/login" className="login-btn desktop-login">Login</a>
 
                 <button className={`hamburger ${isOpen ? "active" : ""}`} onClick={() => setIsOpen(!isOpen)}>
                     <div className="line"></div>

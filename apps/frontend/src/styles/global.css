@@ -23,7 +23,10 @@ body {
     padding: 1.5rem 1rem;
     max-width: 1200px;
     margin: 0 auto;
-    position: relative;
+    position: sticky;
+    top: 0;
+    background-color: var(--color-bg);
+    z-index: 2000;
 }
 
 .nav-group-left {
@@ -156,6 +159,7 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: background-color 0.2s ease;
+    text-decoration: none;
 }
 
 .login-btn:hover {
@@ -454,7 +458,7 @@ body {
 }
 
 .service-card:hover {
-    transform: scale(1.04);
+    transform: scale(1.02);
     box-shadow: 0 15px 30px rgba(0, 0, 0, 0.08);
     z-index: 10;
 }
@@ -526,6 +530,10 @@ body {
     font-size: 0.9rem;
     cursor: pointer;
     transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.service-open-btn:hover {
+    transform: scale(1.1);
 }
 
 /* FOOTER */
@@ -689,5 +697,204 @@ body {
         flex-direction: column;
         gap: 20px;
         text-align: center;
+    }
+}
+
+/* LOGIN */
+
+.login-page {
+    background-color: var(--color-surface);
+    min-height: 100vh;
+    width: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.back-home-brand {
+    position: absolute;
+    top: 30px;
+    left: 40px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+    z-index: 10;
+}
+
+
+.back-home-brand .logo-text {
+    display: block !important;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--color-contrast);
+}
+
+.login-container {
+    width: 100%;
+    max-width: 450px;
+}
+
+.login-card {
+    background: #ffffff;
+    padding: 50px 40px;
+    border-radius: 16px;
+    box-shadow: 0 15px 40px var(--color-shadow);
+    display: flex;
+    flex-direction: column;
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.login-header h2 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin: 10px 0;
+    letter-spacing: -1px;
+    color: var(--color-text);
+}
+
+.login-header .dot {
+    color: var(--color-primary);
+}
+
+.login-header p {
+    color: var(--color-text);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.login-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.input-group label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-contrast);
+}
+
+.input-group input {
+    width: 100%;
+    padding: 14px;
+    border: 1.5px solid var(--color-surface);
+    border-radius: 10px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.validation-error {
+    color: var(--color-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin: -10px 0 0 0;
+}
+
+.login-actions {
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.login-btn-submit {
+    width: 100%;
+    background-color: var(--color-primary);
+    color: white;
+    padding: 15px;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.login-btn-submit:hover {
+    background-color: var(--color-contrast);
+}
+
+.help-links {
+    display: flex;
+    justify-content: space-between;
+}
+
+.login-footer {
+    margin-top: 40px;
+    text-align: center;
+    border-top: 1px solid var(--color-surface);
+    padding-top: 25px;
+}
+
+.login-footer p {
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+}
+
+.help-links a, 
+.login-footer a {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.help-links a:hover, 
+.login-footer a:hover {
+    text-decoration: underline;
+}
+
+.legal-links {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.legal-links a {
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+.legal-links .separator {
+    color: var(--color-text);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 600px) {
+    .back-home-brand {
+        left: 20px;
+        top: 20px;
+    }
+
+    .back-home-brand .logo-text {
+        font-size: 1.2rem;
+    }
+
+    .login-card {
+        padding: 40px 25px;
+    }
+
+    .login-header h2 {
+        font-size: 1.8rem;
     }
 }
