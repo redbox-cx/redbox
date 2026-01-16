@@ -5,7 +5,7 @@ import { IsString, Length } from "class-validator";
 export class RegisterUsersDto {
     
     @IsString()
-    @Length(5,20)
+    @Length(5,50)
     username: string;
 
     @IsString()

@@ -1,6 +1,6 @@
 import { PrismaService } from "src/prisma.service";
-import { Users } from "./users.model";
-import { ConflictException, Injectable } from "@nestjs/common";
+import { User } from "./users.model";
+import { ConflictException, Injectable, InternalServerErrorException } from "@nestjs/common";
 
 
 
@@ -9,12 +9,7 @@ export class UsersService{
 
     constructor(private prisma: PrismaService){}
 
-    async getAllUser():Promise<Users[]>{
-        return this.prisma.user.findMany()
-    }
-
-
-    async createUser(data:Users): Promise<Users>{
+    async createUser(data:User): Promise<User>{
         const existing = await this.prisma.user.findUnique({
             where: {
                 username: data.username
@@ -22,11 +17,21 @@ export class UsersService{
         })
 
         if(existing){
-            throw new ConflictException('username already exists')
+            throw new ConflictException('Username already exists')
         }
 
-        return this.prisma.user.create({
-            data
-        })
+        try {
+            return await this.prisma.user.create({
+                data: {
+                    username: data.username,
+                    password: data.password,
+                    inviteCode: data.inviteCode,
+                    role: data.role,
+                    status: data.status
+                }
+            });
+        } catch (error) {
+            throw new InternalServerErrorException('Error while creating user')
+        }
     }
 }

@@ -22,10 +22,29 @@ enum UserStatus {
   LOCKED // account (temp) deactivated
 }
 
+// Accountrolle enum
+enum UserRole {
+  USER // default
+  ADMIN // all perms
+}
+
 model User {
-  id         Int        @id @default(autoincrement())
-  username   String     @unique @db.VarChar(20)
-  password   String     @db.VarChar(100)
-  status     UserStatus @default(ACTIVE) // accountstatus enum
-  inviteCode String     @db.VarChar(100) // used invite-code for creation
+  id              Int        @id @default(autoincrement())
+  username        String     @unique @db.VarChar(50)
+  password        String     @db.VarChar(100)
+  status          UserStatus @default(ACTIVE) // accountstatus enum
+  role            UserRole   @default(USER) // accountrole enum
+  inviteCode      String     @db.VarChar(50) // used invite-code for creation
+  inviteReference InviteCode @relation(fields: [inviteCode], references: [code]) // reference to inv code model
+  createdAt       DateTime   @default(now())
+}
+
+model InviteCode {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(50)
+  users     User[]
+  maxUses   Int      @default(1)
+  usedCount Int      @default(0)
+  comment   String?  @db.VarChar(255)
+  createdAt DateTime @default(now())
 }
