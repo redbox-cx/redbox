@@ -1,15 +1,20 @@
-import 'dotenv/config'; // <--- DIESE ZEILE MUSS GANZ OBEN STEHEN!
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Kleiner Tipp für dein React-Frontend:
-  // React (Vite) läuft meistens auf Port 5173, nicht 3000. 
-  // Das Backend läuft auf 3000.
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }));
+
+
   const cors = {
-    origin: ['http://localhost:5173'], // Hier die URL deines React-Frontends rein
+    origin: ['http://localhost:5173'], // url react frontend
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   };
@@ -19,7 +24,6 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   
-  console.log(`🚀 Backend läuft auf: http://localhost:${port}`);
-  console.log(`📊 Datenbank-URL geladen: ${process.env.DATABASE_URL ? 'JA' : 'NEIN'}`);
+  console.log(`backend running on port:${port}`);
 }
 bootstrap();

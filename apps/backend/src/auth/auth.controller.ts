@@ -19,15 +19,19 @@ export class AuthController{
         try{
             const result= await this.authService.login(loginDto);
             return response.status(200).json({
-                status: 'Ok!',
-                message: 'Successfully login!',
+                status: 'Ok',
+                message: 'Successfully logged in',
                 result: result
             })
 
         }catch(err){
+            if (err.status && err.response) {
+                return response.status(err.status).json(err.response);
+            }
+            console.error(err);
                 return response.status(500).json({
-                status: 'Error!',
-                message: 'Internal Server Error!',
+                status: 'Error',
+                message: 'Internal Server Error',
             })
         }
     }
@@ -37,15 +41,19 @@ export class AuthController{
         try{
             const result= await this.authService.register(registerDto);
             return response.status(200).json({
-                status: 'Ok!',
-                message: 'Successfully register user!',
+                status: 'Ok',
+                message: 'Successfully registered',
                 result: result
             })
 
         }catch(err){
+            if (err.status && err.response) {
+                return response.status(err.status).json(err.response);
+            }
+            console.error(err);
                 return response.status(500).json({
-                status: 'Error!',
-                message: 'Internal Server Error!',
+                status: 'Error',
+                message: 'Internal Server Error',
             })
         }
     }

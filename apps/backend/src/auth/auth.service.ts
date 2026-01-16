@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma.service';
 import { UsersService } from 'src/users/users.service';
 import { LoginDto } from './dto/login-user.dto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { RegisterUsersDto } from './dto/register-user.dto';
-import { Users } from 'src/users/users.model';
+import { User } from 'src/users/users.model';
+import { UserRole, UserStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -17,38 +18,73 @@ export class AuthService {
         const {username,password} = loginDto;
 
 
-        const users =await this.prismaService.user.findUnique({
+        const user =await this.prismaService.user.findUnique({
             where: {username}
         })
 
-        if(!users){
-            throw new NotFoundException('user not found')
+        if(!user){
+            throw new UnauthorizedException('Invalid username or password')
         }
 
-        const validatePassword = await bcrypt.compare(password,users.password)
+        const isPasswordValid = await bcrypt.compare(password,user.password)
 
-        if(!validatePassword){
-            throw new NotFoundException('Invalid password')
+        if(!isPasswordValid){
+            throw new UnauthorizedException('Invalid username or password')
         }
 
         return {
-            token: this.jwtService.sign({username})
+            token: this.jwtService.sign({username: user.username, sub: user.id, role: user.role})
         }
     }
 
 
     async register (createDto: RegisterUsersDto): Promise<any>{
-        const createUsers = new Users()
-        createUsers.username = createDto.username
-        createUsers.password = await bcrypt.hash(createDto.password,10)
-        createUsers.inviteCode = createDto.inviteCode;
 
-        const user =await this.usersService.createUser(createUsers)
+        const { username, password, inviteCode } = createDto;
+
+        const invite = await this.prismaService.inviteCode.findUnique({
+            where: {code: inviteCode}
+        });
+
+        if (!invite) {
+            throw new UnauthorizedException('Invalid invite code')
+        }
+
+        if (invite.usedCount >= invite.maxUses) {
+            throw new BadRequestException('Invite code has no uses left')
+        }
 
 
+        try {
+            const result = await this.prismaService.$transaction(async (prisma) => {
+                const hashedPassword = await bcrypt.hash(password, 10);
 
-                return {
-            token: this.jwtService.sign({username: user.username})
+                const newUser = await prisma.user.create({
+                    data: {
+                        username,
+                        password: hashedPassword,
+                        inviteCode,
+                        role: UserRole.USER,
+                        status: UserStatus.ACTIVE
+                    }
+                });
+
+                await prisma.inviteCode.update({
+                    where: {id: invite.id},
+                    data: {usedCount: {increment: 1}}
+                });
+
+                return newUser;
+            });
+
+            return {
+                token: this.jwtService.sign({username: result.username, sub: result.id, role: result.role})
+            };
+        } catch (error) {
+            if (error.code === 'P2002') {
+                throw new ConflictException('Username already taken')
+            }
+            throw new BadRequestException('Registration failed');
         }
     }
 }
