@@ -1,8 +1,10 @@
-import { Controller,Post,Req,Res,Body } from "@nestjs/common";
+import { Controller,Post,Req,Res,Body, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login-user.dto";
 import express from 'express';
 import { RegisterUsersDto } from "./dto/register-user.dto";
+import { AuthGuard } from "@nestjs/passport";
+import { JwtAuthGuard } from "./auth.guard";
 
 
 
@@ -56,6 +58,21 @@ export class AuthController{
                 message: 'Internal Server Error',
             })
         }
+    }
+
+
+    @Post('/refresh')
+    @UseGuards(AuthGuard('jwt-refresh'))
+    async refresh(@Req() req: any) {
+        const user = req.user;
+        return this.authService.refreshToken(user.sub, user.refreshToken);
+    }
+
+
+    @Post('/logout')
+    @UseGuards(JwtAuthGuard)
+    async logout(@Req() req: any) {
+        return this.authService.logout(req.user.id);
     }
 
 }
