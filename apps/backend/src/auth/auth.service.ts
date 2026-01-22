@@ -33,7 +33,7 @@ export class AuthService {
         }
 
         return {
-            token: this.jwtService.sign({username: user.username, sub: user.id, role: user.role})
+            token: this.jwtService.sign({username: user.username, sub: user.id})
         }
     }
 
@@ -78,7 +78,7 @@ export class AuthService {
             });
 
             return {
-                token: this.jwtService.sign({username: result.username, sub: result.id, role: result.role})
+                token: this.jwtService.sign({username: result.username, sub: result.id})
             };
         } catch (error) {
             if (error.code === 'P2002') {

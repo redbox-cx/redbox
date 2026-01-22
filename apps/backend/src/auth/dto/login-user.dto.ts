@@ -1,14 +1,14 @@
-import { IsString, Length } from "class-validator";
+import { IsNotEmpty, IsString, Length } from "class-validator";
 
 
 
 export class LoginDto {
 
     @IsString()
-    @Length(5,50)
+    @IsNotEmpty({message: 'Username is required'})
     username: string;
 
     @IsString()
-    @Length(8,100)
+    @IsNotEmpty({message: 'Password is required'})
     password: string;
 }

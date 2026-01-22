@@ -37,6 +37,7 @@ model User {
   inviteCode      String     @db.VarChar(50) // used invite-code for creation
   inviteReference InviteCode @relation(fields: [inviteCode], references: [code]) // reference to inv code model
   createdAt       DateTime   @default(now())
+  hashedRt        String?    @db.VarChar(255) // refresh-token
 }
 
 model InviteCode {
