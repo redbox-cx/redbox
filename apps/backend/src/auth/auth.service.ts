@@ -18,7 +18,10 @@ export class AuthService {
     ){}
 
 
-    async getTokens(userId: number, username: string) {
+    async getTokens(userId: number, username: string, version: number) {
+
+        const payload = { sub: userId, username, version };
+
         const [at, rt] = await Promise.all([
             this.jwtService.signAsync(
                 { sub: userId, username },
@@ -26,20 +29,11 @@ export class AuthService {
             ),
             this.jwtService.signAsync(
                 { sub: userId, username },
-                { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '3d'},
+                { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '1d'},
             ),  
         ]);
 
         return {access_token: at, refresh_token: rt };
-    }
-
-
-    async updateRtHash(userId: number, rt: string) {
-        const hash = await bcrypt.hash(rt, 10);
-        await this.prismaService.user.update({
-            where: { id: userId },
-            data: { hashedRt: hash },
-        });
     }
 
 
@@ -61,10 +55,7 @@ export class AuthService {
             throw new UnauthorizedException('Invalid username or password')
         }
 
-        const tokens = await this.getTokens(user.id, user.username);
-        await this.updateRtHash(user.id, tokens.refresh_token);
-
-        return tokens;
+        return this.getTokens(user.id, user.username, user.tokenVersion);
     }
 
 
@@ -95,7 +86,8 @@ export class AuthService {
                         password: hashedPassword,
                         inviteCode,
                         role: UserRole.USER,
-                        status: UserStatus.ACTIVE
+                        status: UserStatus.ACTIVE,
+                        tokenVersion: 1
                     }
                 });
 
@@ -107,10 +99,8 @@ export class AuthService {
                 return newUser;
             });
 
-            const tokens = await this.getTokens(result.id, result.username);
-            await this.updateRtHash(result.id, tokens.refresh_token);
+            return this.getTokens(result.id, result.username, result.tokenVersion);
 
-            return tokens;
         } catch (error) {
             if (error.code === 'P2002') throw new ConflictException('Username already taken')
             throw new BadRequestException('Registration failed');
@@ -118,30 +108,30 @@ export class AuthService {
     }
 
 
-    async refreshToken(userId: number, rt: string) {
+    async refreshToken(userId: number, versionInToken: number) {
         const user = await this.prismaService.user.findUnique({
             where: { id: userId },
         });
 
-        if (!user || !user.hashedRt) throw new ForbiddenException('Access Denied');
+        if (!user || user.tokenVersion !== versionInToken) {throw new ForbiddenException('Access Denied');}
 
-        const rtMatches = await bcrypt.compare(rt, user.hashedRt);
-        if (!rtMatches) throw new ForbiddenException('Access Denied');
+        const updatedUser = await this.prismaService.user.update({
+            where: { id: userId },
+            data: { tokenVersion: { increment: 1 } }
+        });
 
-        const tokens = await this.getTokens(user.id, user.username);
-        await this.updateRtHash(user.id, tokens.refresh_token);
-
-        return tokens;
+        return this.getTokens(updatedUser.id, updatedUser.username, updatedUser.tokenVersion);
     }
 
 
     async logout(userId: number) {
-        await this.prismaService.user.updateMany({
+        await this.prismaService.user.update({
             where: {
                 id: userId,
-                hashedRt: { not:null }
             },
-            data: { hashedRt: null },
+            data: { tokenVersion: { increment: 1 } }
         });
+
+        return { message: 'Logged out successfully' };
     }
 }
