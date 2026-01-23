@@ -14,7 +14,7 @@ const menuItems = [
     ],
   },
   { name: "About", path: "/about" },
-  { name: "Blog", path: "#" },
+  { name: "Blog", path: "/blog" },
   { name: "Contact", path: "#" },
   { name: "Donate", path: "#" },
 ];
