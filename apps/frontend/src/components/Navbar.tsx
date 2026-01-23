@@ -13,7 +13,7 @@ const menuItems = [
       { name: "ToolSet", path: "#", icon: logoRed },
     ],
   },
-  { name: "About", path: "#" },
+  { name: "About", path: "/about" },
   { name: "Blog", path: "#" },
   { name: "Contact", path: "#" },
   { name: "Donate", path: "#" },
