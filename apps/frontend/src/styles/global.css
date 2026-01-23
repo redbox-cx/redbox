@@ -1015,3 +1015,69 @@ body {
     }
 }
 /*#endregion*/
+
+/*#region Blog*/
+
+.blog-feed {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 100px 40px;
+    min-height: 60vh;
+}
+
+.blog-status-message {
+    margin: auto;
+    text-align: center;
+    max-width: 500px;
+}
+
+.blog-status-message i {
+    font-size: 3.5rem;
+    color: var(--color-inactive);
+    margin-bottom: 25px;
+    display: block;
+}
+
+.blog-status-message h2 {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--color-contrast);
+    margin-bottom: 15px;
+}
+
+.blog-status-message p {
+    font-size: 1.15rem;
+    line-height: 1.7;
+    color: var(--color-text);
+    opacity: 0.7;
+    margin-bottom: 45px;
+}
+
+.blog-home-link {
+    display: inline-block;
+    background-color: var(--color-contrast);
+    color: white;
+    padding: 14px 35px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.blog-home-link:hover {
+    background-color: var(--color-primary);
+    transform: translateY(-2px);
+}
+
+@media (max-width: 900px) {
+    .blog-feed {
+        padding: 60px 20px;
+    }
+    
+    .blog-status-message h2 {
+        font-size: 2.2rem;
+    }
+}
+/*#endregion*/
+
