@@ -1,0 +1,23 @@
+services:
+  db:
+    image: mariadb:11
+    container_name: redbox-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: redbox_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - redbox_db_data:/var/lib/mysql
+
+  # Cache & Chat: Redis
+  redis:
+    image: redis:7-alpine
+    container_name: redbox-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  redbox_db_data:
