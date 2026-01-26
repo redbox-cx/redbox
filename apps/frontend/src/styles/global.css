@@ -1081,3 +1081,339 @@ body {
 }
 /*#endregion*/
 
+/*#region Contact*/
+
+.contact-container {
+    padding: 80px 40px;
+    max-width: 900px; /* Kept tight for readability */
+}
+
+.contact-intro {
+    margin-bottom: 60px;
+}
+
+.contact-title {
+    font-size: 3rem;
+    font-weight: 800;
+    margin-bottom: 20px;
+    color: var(--color-contrast);
+}
+
+.contact-description {
+    font-size: 1.2rem;
+    line-height: 1.8;
+    color: var(--color-text);
+    opacity: 0.8;
+}
+
+/* Contact Grid & Cards */
+.contact-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.contact-card {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    padding: 25px 30px;
+    background-color: var(--color-surface);
+    border-radius: 16px;
+    text-decoration: none;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+}
+
+.contact-card:hover {
+    transform: scale(1.01);
+    box-shadow: 0 5px 10px var(--color-shadow);
+}
+
+.contact-icon-box {
+    width: 60px;
+    height: 60px;
+    background-color: var(--color-primary);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.contact-icon-box i {
+    font-size: 1.8rem;
+    color: white;
+}
+
+.contact-info h3 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--color-contrast);
+    margin: 0 0 5px 0;
+}
+
+.contact-info p {
+    font-size: 1rem;
+    color: var(--color-text);
+    opacity: 0.6;
+    margin: 0;
+}
+
+@media (max-width: 900px) {
+    .contact-container {
+        padding: 60px 20px;
+    }
+
+    .contact-title {
+        font-size: 2.2rem;
+    }
+
+    .contact-card {
+        padding: 20px;
+        gap: 20px;
+    }
+
+    .contact-icon-box {
+        width: 50px;
+        height: 50px;
+    }
+
+    .contact-icon-box i {
+        font-size: 1.5rem;
+    }
+}
+/*#endregion*/
+
+/*#region Donation*/
+.donation-container {
+    padding: 80px 40px;
+    max-width: 900px;
+}
+
+.donation-intro {
+    margin-bottom: 60px;
+}
+
+.donation-title {
+    font-size: 3rem;
+    font-weight: 800;
+    margin-bottom: 25px;
+    color: var(--color-contrast);
+}
+
+.donation-description {
+    font-size: 1.2rem;
+    line-height: 1.8;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin-bottom: 20px;
+}
+
+.donation-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.donation-card {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    padding: 30px;
+    background-color: var(--color-surface);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+    position: relative;
+    border: 1px solid transparent;
+}
+
+.donation-card:hover {
+    box-shadow: 0 5px 10px var(--color-shadow);
+    background-color: white;
+    border-color: var(--color-shadow);
+}
+
+.donation-icon-box {
+    width: 65px;
+    height: 65px;
+    background-color: var(--color-contrast);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+    position: relative;
+    z-index: 5;
+}
+
+.donation-icon-box i {
+    font-size: 1.8rem;
+    color: white;
+}
+
+.donation-icon-box:hover {
+    background-color: var(--color-primary);
+}
+
+.donation-info {
+    flex: 1;
+}
+
+.donation-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.donation-meta h3 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--color-contrast);
+}
+
+.coin-symbol {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--color-primary);
+    background: rgba(149, 29, 42, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.donation-address {
+    font-size: 1rem;
+    color: var(--color-text);
+    opacity: 0.6;
+    letter-spacing: 0.5px;
+}
+
+.copy-indicator {
+    color: var(--color-inactive);
+    font-size: 1.2rem;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.donation-card:hover .copy-indicator {
+    opacity: 1;
+}
+
+.donation-footer-note {
+    margin-top: 40px;
+    font-style: italic;
+    color: var(--color-inactive);
+    text-align: center;
+}
+
+/* --- QR MODAL --- */
+
+.qr-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5000;
+    padding: 20px;
+}
+
+.qr-modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 20px;
+    max-width: 350px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.2);
+    animation: modalAppear 0.3s ease-out;
+}
+
+@keyframes modalAppear {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.qr-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.qr-modal-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.qr-modal-header button {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--color-inactive);
+    transition: color 0.2s;
+}
+
+.qr-modal-header button:hover {
+    color: var(--color-primary);
+}
+
+.qr-image-container {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+}
+
+.qr-image-container img {
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+.qr-modal-content p {
+    font-size: 0.9rem;
+    color: var(--color-inactive);
+    margin: 0;
+}
+
+@media (max-width: 900px) {
+    .donation-container {
+        padding: 60px 20px;
+    }
+    
+    .donation-title {
+        font-size: 2.2rem;
+    }
+
+    .donation-card {
+        padding: 20px;
+        gap: 15px;
+    }
+
+    .donation-address {
+        font-size: 0.9rem;
+    }
+
+    .donation-icon-box {
+        width: 55px;
+        height: 55px;
+    }
+
+    .donation-icon-box i {
+        font-size: 1.5rem;
+    }
+}
+/*#endregion*/

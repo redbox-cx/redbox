@@ -15,8 +15,8 @@ const menuItems = [
   },
   { name: "About", path: "/about" },
   { name: "Blog", path: "/blog" },
-  { name: "Contact", path: "#" },
-  { name: "Donate", path: "#" },
+  { name: "Contact", path: "/contact" },
+  { name: "Donate", path: "/donate" },
 ];
 
 function Menu({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (val: boolean) => void }) {
