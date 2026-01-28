@@ -1,6 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
-import { createSecretKey } from "crypto";
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { PrismaService } from "src/prisma.service";
 
@@ -18,12 +17,16 @@ export class JwtStrategy extends PassportStrategy(Strategy){
     }
 
 
-    async validate(payload:{username:string}){
-        const users = await this.prismaService.user.findUnique({
+    async validate(payload:{ sub: number, username:string, version: number }){
+        const user = await this.prismaService.user.findUnique({
             where:{
-                username: payload.username
+                id: payload.sub
             }
-        })
-        return users;
+        });
+
+        if (!user || user.tokenVersion !== payload.version) {
+            throw new UnauthorizedException('Access Denied (Session Expired)')
+        }
+        return user;
     }
 }   

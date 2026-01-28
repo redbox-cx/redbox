@@ -113,7 +113,7 @@ export class AuthService {
             where: { id: userId },
         });
 
-        if (!user || user.tokenVersion !== versionInToken) {throw new ForbiddenException('Access Denied');}
+        if (!user || user.tokenVersion !== versionInToken) {throw new ForbiddenException('Access Denied (Session expired)');}
 
         const updatedUser = await this.prismaService.user.update({
             where: { id: userId },
