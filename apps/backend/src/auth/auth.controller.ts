@@ -63,16 +63,51 @@ export class AuthController{
 
     @Post('/refresh')
     @UseGuards(AuthGuard('jwt-refresh'))
-    async refresh(@Req() req: any) {
-        const user = req.user;
-        return this.authService.refreshToken(user.sub, user.refreshToken);
+    async refresh(@Req() req: any, @Res() response: express.Response) {
+        try {
+            const userId = req.user.sub;
+            const version = req.user.version; 
+
+            const result = await this.authService.refreshToken(userId, version);
+            
+            return response.status(200).json({
+                status: 'Ok',
+                message: 'Token refreshed',
+                result: result
+            });
+        } catch (err) {
+            if (err.status && err.response) {
+                return response.status(err.status).json(err.response);
+            }
+            console.error("Refresh Error:", err);
+            return response.status(500).json({
+                status: 'Error',
+                message: 'Internal Server Error',
+            });
+        }
     }
+
 
 
     @Post('/logout')
     @UseGuards(JwtAuthGuard)
-    async logout(@Req() req: any) {
-        return this.authService.logout(req.user.id);
+    async logout(@Req() req: any, @Res() response: express.Response) {
+        try {
+            const userId = req.user.id;
+            const result = await this.authService.logout(userId);
+            
+            return response.status(200).json({
+                status: 'Ok',
+                message: 'Logged out successfully',
+                result: result
+            });
+        } catch (err) {
+            console.error("Logout Error:", err);
+            return response.status(500).json({
+                status: 'Error',
+                message: 'Internal Server Error',
+            });
+        }
     }
 
 }

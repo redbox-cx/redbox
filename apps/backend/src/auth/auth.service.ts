@@ -24,11 +24,11 @@ export class AuthService {
 
         const [at, rt] = await Promise.all([
             this.jwtService.signAsync(
-                { sub: userId, username },
+                payload,
                 { secret: process.env.JWT_ACCESS_SECRET, expiresIn: '10m'},
             ),
             this.jwtService.signAsync(
-                { sub: userId, username },
+                payload,
                 { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '1d'},
             ),  
         ]);

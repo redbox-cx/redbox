@@ -13,6 +13,6 @@ export class RegisterUsersDto {
     password: string;
 
     @IsString()
-    @Length(4,50)
+    @Length(0,50)
     inviteCode: string;
 }
