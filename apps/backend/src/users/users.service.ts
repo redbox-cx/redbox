@@ -27,7 +27,8 @@ export class UsersService{
                     password: data.password,
                     inviteCode: data.inviteCode,
                     role: data.role,
-                    status: data.status
+                    status: data.status,
+                    sessionKey: data.sessionKey
                 }
             });
         } catch (error) {

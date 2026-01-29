@@ -66,9 +66,9 @@ export class AuthController{
     async refresh(@Req() req: any, @Res() response: express.Response) {
         try {
             const userId = req.user.sub;
-            const version = req.user.version; 
+            const sessionKey = req.user.sessionKey; 
 
-            const result = await this.authService.refreshToken(userId, version);
+            const result = await this.authService.refreshToken(userId, sessionKey);
             
             return response.status(200).json({
                 status: 'Ok',

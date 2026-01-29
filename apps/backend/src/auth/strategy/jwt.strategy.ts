@@ -17,14 +17,14 @@ export class JwtStrategy extends PassportStrategy(Strategy){
     }
 
 
-    async validate(payload:{ sub: number, username:string, version: number }){
+    async validate(payload:{ sub: number, username:string, sessionKey: string }){
         const user = await this.prismaService.user.findUnique({
             where:{
                 id: payload.sub
             }
         });
 
-        if (!user || user.tokenVersion !== payload.version) {
+        if (!user || user.sessionKey !== payload.sessionKey) {
             throw new UnauthorizedException('Access Denied (Session Expired)')
         }
         return user;

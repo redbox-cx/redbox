@@ -7,6 +7,7 @@ import * as bcrypt from 'bcryptjs';
 import { RegisterUsersDto } from './dto/register-user.dto';
 import { User } from 'src/users/users.model';
 import { UserRole, UserStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -18,9 +19,9 @@ export class AuthService {
     ){}
 
 
-    async getTokens(userId: number, username: string, version: number) {
+    async getTokens(userId: number, username: string, sessionKey: string) {
 
-        const payload = { sub: userId, username, version };
+        const payload = { sub: userId, username, sessionKey };
 
         const [at, rt] = await Promise.all([
             this.jwtService.signAsync(
@@ -55,7 +56,7 @@ export class AuthService {
             throw new UnauthorizedException('Invalid username or password')
         }
 
-        return this.getTokens(user.id, user.username, user.tokenVersion);
+        return this.getTokens(user.id, user.username, user.sessionKey);
     }
 
 
@@ -87,7 +88,7 @@ export class AuthService {
                         inviteCode,
                         role: UserRole.USER,
                         status: UserStatus.ACTIVE,
-                        tokenVersion: 1
+                        sessionKey: randomUUID()
                     }
                 });
 
@@ -99,7 +100,7 @@ export class AuthService {
                 return newUser;
             });
 
-            return this.getTokens(result.id, result.username, result.tokenVersion);
+            return this.getTokens(result.id, result.username, result.sessionKey);
 
         } catch (error) {
             if (error.code === 'P2002') throw new ConflictException('Username already taken')
@@ -108,19 +109,19 @@ export class AuthService {
     }
 
 
-    async refreshToken(userId: number, versionInToken: number) {
+    async refreshToken(userId: number, keyFromToken: string) {
         const user = await this.prismaService.user.findUnique({
             where: { id: userId },
         });
 
-        if (!user || user.tokenVersion !== versionInToken) {throw new ForbiddenException('Access Denied (Session expired)');}
+        if (!user || user.sessionKey !== keyFromToken) {throw new ForbiddenException('Access Denied (Session invalid)');}
 
         const updatedUser = await this.prismaService.user.update({
             where: { id: userId },
-            data: { tokenVersion: { increment: 1 } }
+            data: { sessionKey: randomUUID()}
         });
 
-        return this.getTokens(updatedUser.id, updatedUser.username, updatedUser.tokenVersion);
+        return this.getTokens(updatedUser.id, updatedUser.username, updatedUser.sessionKey);
     }
 
 
@@ -129,7 +130,7 @@ export class AuthService {
             where: {
                 id: userId,
             },
-            data: { tokenVersion: { increment: 1 } }
+            data: { sessionKey: randomUUID()}
         });
 
         return { message: 'Logged out successfully' };

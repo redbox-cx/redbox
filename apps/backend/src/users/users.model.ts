@@ -8,5 +8,6 @@ export class User {
     status?: UserStatus;
     role?: UserRole;
     inviteCode: string;
+    sessionKey: string; 
     createdAt?: Date;
 }
