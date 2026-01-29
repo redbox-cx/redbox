@@ -27,7 +27,7 @@ export class AuthService {
         const [at, rt] = await Promise.all([
             this.jwtService.signAsync(
                 payload,
-                { secret: process.env.JWT_ACCESS_SECRET, expiresIn: '10m'},
+                { secret: process.env.JWT_ACCESS_SECRET, expiresIn: '5m'},
             ),
             this.jwtService.signAsync(
                 payload,
@@ -80,7 +80,7 @@ export class AuthService {
 
         try {
             const result = await this.prismaService.$transaction(async (prisma) => {
-                const hashedPassword = await bcrypt.hash(password, 10);
+                const hashedPassword = await bcrypt.hash(password, 13);
 
                 const newUser = await prisma.user.create({
                     data: {
@@ -138,37 +138,37 @@ export class AuthService {
 
 
     async generateInviteCode(userId: number) {
-    const user = await this.prismaService.user.findUnique({
-        where: { id: userId }
-    });
+        const user = await this.prismaService.user.findUnique({
+            where: { id: userId }
+        });
 
-    if (!user) {
-        throw new ForbiddenException('User not found');
-    }
+        if (!user) {
+            throw new ForbiddenException('User not found');
+        }
 
 
-    if (user.issuedCodes >= 2) {
-        throw new BadRequestException('Invite-Limit reached');
-    }
+        if (user.issuedCodes >= 2) {
+            throw new BadRequestException('Invite-Limit reached');
+        }
 
-    const newCodeString = `RB-${randomBytes(8).toString('hex').toUpperCase()}`;
+        const newCodeString = `RB-${randomBytes(8).toString('hex').toUpperCase()}`;
 
-    return await this.prismaService.$transaction(async (prisma) => {
+        return await this.prismaService.$transaction(async (prisma) => {
 
-        const newInvite = await prisma.inviteCode.create({
-                data: {
-                    code: newCodeString,
-                    usage: 1,
-                    userId: userId
-                } as Prisma.InviteCodeUncheckedCreateInput
-            });
+            const newInvite = await prisma.inviteCode.create({
+                    data: {
+                        code: newCodeString,
+                        usage: 1,
+                        userId: userId
+                    } as Prisma.InviteCodeUncheckedCreateInput
+                });
 
-            await prisma.user.update({
-                where: { id: userId },
-                data: { issuedCodes: { increment: 1 } }
-            });
+                await prisma.user.update({
+                    where: { id: userId },
+                    data: { issuedCodes: { increment: 1 } }
+                });
 
-            return newInvite;
+                return newInvite;
         });
     }
 
