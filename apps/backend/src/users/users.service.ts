@@ -25,7 +25,6 @@ export class UsersService{
                 data: {
                     username: data.username,
                     password: data.password,
-                    inviteCode: data.inviteCode,
                     role: data.role,
                     status: data.status,
                     sessionKey: data.sessionKey

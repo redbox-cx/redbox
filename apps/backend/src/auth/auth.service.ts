@@ -6,8 +6,9 @@ import { LoginDto } from './dto/login-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { RegisterUsersDto } from './dto/register-user.dto';
 import { User } from 'src/users/users.model';
-import { UserRole, UserStatus } from '@prisma/client';
+import { Prisma, UserRole, UserStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -69,11 +70,11 @@ export class AuthService {
         });
 
         if (!invite) {
-            throw new UnauthorizedException('Invalid invite code')
+            throw new UnauthorizedException('Invalid or expired invite code')
         }
 
-        if (invite.usedCount >= invite.maxUses) {
-            throw new BadRequestException('Invite code has no uses left')
+        if (invite.usage <= 0) {
+            throw new BadRequestException('Invalid or expired invite code')
         }
 
 
@@ -85,7 +86,6 @@ export class AuthService {
                     data: {
                         username,
                         password: hashedPassword,
-                        inviteCode,
                         role: UserRole.USER,
                         status: UserStatus.ACTIVE,
                         sessionKey: randomUUID()
@@ -94,7 +94,7 @@ export class AuthService {
 
                 await prisma.inviteCode.update({
                     where: {id: invite.id},
-                    data: {usedCount: {increment: 1}}
+                    data: { usage: { decrement: 1 } }
                 });
 
                 return newUser;
@@ -134,5 +134,53 @@ export class AuthService {
         });
 
         return { message: 'Logged out successfully' };
+    }
+
+
+    async generateInviteCode(userId: number) {
+    const user = await this.prismaService.user.findUnique({
+        where: { id: userId }
+    });
+
+    if (!user) {
+        throw new ForbiddenException('User not found');
+    }
+
+
+    if (user.issuedCodes >= 2) {
+        throw new BadRequestException('Invite-Limit reached');
+    }
+
+    const newCodeString = `RB-${randomBytes(8).toString('hex').toUpperCase()}`;
+
+    return await this.prismaService.$transaction(async (prisma) => {
+
+        const newInvite = await prisma.inviteCode.create({
+                data: {
+                    code: newCodeString,
+                    usage: 1,
+                    userId: userId
+                } as Prisma.InviteCodeUncheckedCreateInput
+            });
+
+            await prisma.user.update({
+                where: { id: userId },
+                data: { issuedCodes: { increment: 1 } }
+            });
+
+            return newInvite;
+        });
+    }
+
+    async getMyInvites(userId: number) {
+        return this.prismaService.inviteCode.findMany({
+            where: { 
+                userId: userId
+            }  as Prisma.InviteCodeWhereInput,
+            select: { 
+                code: true, 
+                usage: true 
+            }
+        });
     }
 }

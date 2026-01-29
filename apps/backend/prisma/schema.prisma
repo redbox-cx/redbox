@@ -28,24 +28,31 @@ enum UserRole {
   ADMIN // all perms
 }
 
+// User-Avatar enum
+enum UserAvatar {
+  DEFAULT_AVATAR
+  EXAMPLE1
+  EXAMPLE2
+  EXAMPLE3
+}
+
 model User {
-  id              Int        @id @default(autoincrement())
-  username        String     @unique @db.VarChar(50)
-  password        String     @db.VarChar(100)
-  status          UserStatus @default(ACTIVE) // accountstatus enum
-  role            UserRole   @default(USER) // accountrole enum
-  inviteCode      String     @db.VarChar(50) // used invite-code for creation
-  inviteReference InviteCode @relation(fields: [inviteCode], references: [code]) // reference to inv code model
-  createdAt       DateTime   @default(now())
-  sessionKey      String     @default(uuid())
+  id             Int          @id @default(autoincrement())
+  username       String       @unique @db.VarChar(50)
+  password       String       @db.VarChar(100)
+  avatar         UserAvatar   @default(DEFAULT_AVATAR)
+  status         UserStatus   @default(ACTIVE) // accountstatus enum
+  role           UserRole     @default(USER) // accountrole enum
+  sessionKey     String       @default(uuid())
+  createdAt      DateTime     @default(now())
+  issuedCodes    Int          @default(0) // amount of codes the user made
+  generatedCodes InviteCode[] @relation("GeneratedBy")
 }
 
 model InviteCode {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique @db.VarChar(50)
-  users     User[]
-  maxUses   Int      @default(1)
-  usedCount Int      @default(0)
-  comment   String?  @db.VarChar(255)
-  createdAt DateTime @default(now())
+  id      Int    @id @default(autoincrement())
+  code    String @unique @db.VarChar(50)
+  usage   Int    @default(1)
+  userId  Int?
+  creator User?  @relation("GeneratedBy", fields: [userId], references: [id])
 }

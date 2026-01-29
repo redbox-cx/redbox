@@ -1,4 +1,4 @@
-import { Controller,Post,Req,Res,Body, UseGuards } from "@nestjs/common";
+import { Controller,Post,Get,Req,Res,Body, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login-user.dto";
 import express from 'express';
@@ -107,6 +107,27 @@ export class AuthController{
                 status: 'Error',
                 message: 'Internal Server Error',
             });
+        }
+    }
+
+    @Post('/generate-invite')
+    @UseGuards(JwtAuthGuard)
+    async generate(@Req() req: any) {
+        return this.authService.generateInviteCode(req.user.id);
+    }
+
+    @Get('/my-invites')
+    @UseGuards(JwtAuthGuard)
+    async getMyInvites(@Req() req: any, @Res() response: express.Response) {
+        try {
+            const result = await this.authService.getMyInvites(req.user.id);
+            
+            return response.status(200).json({
+                status: 'Ok',
+                result: result
+            });
+        } catch (err) {
+            return response.status(500).json({ status: 'Error', message: 'Internal Server Error' });
         }
     }
 
