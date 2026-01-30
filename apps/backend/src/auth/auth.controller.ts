@@ -4,16 +4,16 @@ import { LoginDto } from "./dto/login-user.dto";
 import express from 'express';
 import { RegisterUsersDto } from "./dto/register-user.dto";
 import { AuthGuard } from "@nestjs/passport";
-import { JwtAuthGuard } from "./auth.guard";
+import { JwtAuthGuard } from "./guard/auth.guard";
+import { UsersService } from "src/users/users.service";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 
 
 
 @Controller('/auth')
 export class AuthController{
 
-
-
-    constructor(private readonly authService:AuthService){}
+    constructor(private readonly authService:AuthService, private readonly usersService:UsersService){}
 
 
     @Post('/login')
@@ -110,25 +110,10 @@ export class AuthController{
         }
     }
 
-    @Post('/generate-invite')
-    @UseGuards(JwtAuthGuard)
-    async generate(@Req() req: any) {
-        return this.authService.generateInviteCode(req.user.id);
-    }
 
-    @Get('/my-invites')
+    @Post('/change-password')
     @UseGuards(JwtAuthGuard)
-    async getMyInvites(@Req() req: any, @Res() response: express.Response) {
-        try {
-            const result = await this.authService.getMyInvites(req.user.id);
-            
-            return response.status(200).json({
-                status: 'Ok',
-                result: result
-            });
-        } catch (err) {
-            return response.status(500).json({ status: 'Error', message: 'Internal Server Error' });
-        }
+    async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+        return this.authService.changePassword(req.user.id, dto);
     }
-
 }

@@ -10,9 +10,9 @@ export class RegisterUsersDto {
 
     @IsString()
     @Length(8,100)
-    //@Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
-    //    message: 'Password too weak'
-    //})
+    @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
+        message: 'Password too weak'
+    })
     password: string;
 
     @IsString()

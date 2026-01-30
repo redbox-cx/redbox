@@ -5,10 +5,10 @@ import { UsersService } from 'src/users/users.service';
 import { LoginDto } from './dto/login-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { RegisterUsersDto } from './dto/register-user.dto';
-import { User } from 'src/users/users.model';
-import { Prisma, UserRole, UserStatus } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { randomBytes } from 'crypto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+
 
 @Injectable()
 export class AuthService {
@@ -136,51 +136,26 @@ export class AuthService {
         return { message: 'Logged out successfully' };
     }
 
-
-    async generateInviteCode(userId: number) {
+    async changePassword(userId: number, dto: ChangePasswordDto) {
         const user = await this.prismaService.user.findUnique({
             where: { id: userId }
         });
+        
+        if (!user) throw new ForbiddenException('User not found');
 
-        if (!user) {
-            throw new ForbiddenException('User not found');
-        }
+        const pwMatches = await bcrypt.compare(dto.oldPassword, user.password);
+        if (!pwMatches) throw new UnauthorizedException('Old password incorrect');
 
+        const hashedPassword = await bcrypt.hash(dto.newPassword, 13);
 
-        if (user.issuedCodes >= 2) {
-            throw new BadRequestException('Invite-Limit reached');
-        }
-
-        const newCodeString = `RB-${randomBytes(8).toString('hex').toUpperCase()}`;
-
-        return await this.prismaService.$transaction(async (prisma) => {
-
-            const newInvite = await prisma.inviteCode.create({
-                    data: {
-                        code: newCodeString,
-                        usage: 1,
-                        userId: userId
-                    } as Prisma.InviteCodeUncheckedCreateInput
-                });
-
-                await prisma.user.update({
-                    where: { id: userId },
-                    data: { issuedCodes: { increment: 1 } }
-                });
-
-                return newInvite;
+        await this.prismaService.user.update({
+            where: { id: userId },
+            data: {
+                password: hashedPassword,
+                sessionKey: randomUUID(),
+            },
         });
-    }
 
-    async getMyInvites(userId: number) {
-        return this.prismaService.inviteCode.findMany({
-            where: { 
-                userId: userId
-            }  as Prisma.InviteCodeWhereInput,
-            select: { 
-                code: true, 
-                usage: true 
-            }
-        });
+        return { message: 'Password changed sucessfully. Please log in again.'};
     }
 }
