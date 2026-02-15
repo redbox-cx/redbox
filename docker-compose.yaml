@@ -1,4 +1,5 @@
-services:
+services:  
+  # DB: mariaDB
   db:
     image: mariadb:11
     container_name: redbox-db
