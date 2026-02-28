@@ -14,7 +14,7 @@ export class RegisterUsersDto {
         message: 'Password must have at least 8 characters.'
     })
     @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/,{
-        message: 'Password must include a t least one uppercase letter, one lowercase letter, and at least one number or special character.'
+        message: 'Password must include at least one uppercase letter, one lowercase letter, and at least one number or special character.'
     })
     password: string;
 

@@ -1,22 +1,35 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { AuthService } from "../services/AuthService";
 import logoRed from "@/assets/images/logo_red.png";
 
 export function LoginForm() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const { login } = useAuth();
+    const navigate = useNavigate();
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        if (!username || !password) {
-            setError("Please fill in all fields.");
-            return;
-        }
-
+        setIsLoading(true);
         setError("");
-        console.log("Login details:", { username, password });
-        // auth logic
+        
+        try {
+            const data = await AuthService.login({ username, password });
+            
+            login(data.access_token, data.user);
+            
+            navigate("/dashboard");
+        } catch (err: any) {
+            const message = err.response?.data?.message || "Invalid username or password.";
+            setError(Array.isArray(message) ? message[0] : message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -35,6 +48,7 @@ export function LoginForm() {
                         placeholder="Username" 
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
+                        disabled={isLoading}
                         required 
                     />
                 </div>
@@ -46,6 +60,7 @@ export function LoginForm() {
                         placeholder="••••••••••••••••" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        disabled={isLoading}
                         required 
                     />
                 </div>
@@ -53,7 +68,13 @@ export function LoginForm() {
             </div>
 
             <div className="login-actions">
-                <button type="submit" className="login-btn-submit">Login</button>
+                <button 
+                    type="submit" 
+                    className="login-btn-submit" 
+                    disabled={isLoading}
+                >
+                    {isLoading ? "Authenticating..." : "Login"}
+                </button>
                 <div className="help-links">
                     <a href="#">Trouble signing in?</a>
                 </div>
