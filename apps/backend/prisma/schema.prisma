@@ -47,6 +47,7 @@ model User {
   createdAt      DateTime     @default(now())
   issuedCodes    Int          @default(0) // amount of codes the user made
   generatedCodes InviteCode[] @relation("GeneratedBy")
+  files          File[]
 }
 
 model InviteCode {
@@ -55,4 +56,15 @@ model InviteCode {
   usage   Int    @default(1)
   userId  Int?
   creator User?  @relation("GeneratedBy", fields: [userId], references: [id])
+}
+
+model File {
+  id           String   @id @default(uuid())
+  originalName String
+  storageName  String   @unique // uuid
+  size         Int // size in bytes for check
+  mimetype     String // mimetype (e.g. image/jpeg, application/pdf etc...)
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id])
+  createdAt    DateTime @default(now())
 }
