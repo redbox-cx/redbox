@@ -1,15 +1,15 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import apiClient from '../api/apiClient';
+import { AuthService } from '../services/AuthService';
 
 interface User {
-    id: string;
     username: string;
+    avatar: string;
 }
 
 interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
-    login: (token: string, userData: User) => void;
+    login: (accessToken: string, refreshToken: string, userData: User) => void;
     logout: () => void;
     loading: boolean;
 }
@@ -23,28 +23,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const initializeAuth = async () => {
             const token = localStorage.getItem('access_token');
-            if (token) {
-                try {
-                    const { data } = await apiClient.get('/auth/me');
-                    setUser(data);
-                } catch (err) {
-                    localStorage.removeItem('access_token');
-                }
+            if (!token) {
+                setLoading(false);
+                return;
             }
-            setLoading(false);
+
+            try {
+                const data = await AuthService.getMe();
+                setUser(data);
+            } catch (err) {
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+            } finally {
+                setLoading(false);
+            }
         };
         initializeAuth();
     }, []);
 
-    const login = (token: string, userData: User) => {
-        localStorage.setItem('access_token', token);
+    const login = (accessToken: string, refreshToken: string, userData: any) => {
+        localStorage.setItem('access_token', accessToken);
+        localStorage.setItem('refresh_token', refreshToken);
         setUser(userData);
     };
 
-    const logout = () => {
-        localStorage.removeItem('access_token');
-        setUser(null);
-        window.location.href = '/login';
+    const logout = async () => {
+        try {
+            await AuthService.logout();
+        } catch (err) {
+            console.error("Logout failed", err);
+        } finally {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            setUser(null);
+            window.location.href = '/login';
+        }
     };
 
     return (

@@ -16,17 +16,20 @@ export function LoginForm() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        setError("");
         
         try {
-            const data = await AuthService.login({ username, password });
-            
-            login(data.access_token, data.user);
-            
+            const response = await AuthService.login({ username, password });
+            const { access_token, refresh_token } = response.result; 
+
+            localStorage.setItem('access_token', access_token);
+            const userData = await AuthService.getMe();
+
+
+            login(access_token, refresh_token, userData);
             navigate("/dashboard");
         } catch (err: any) {
-            const message = err.response?.data?.message || "Invalid username or password.";
-            setError(Array.isArray(message) ? message[0] : message);
+            setError("Invalid credentials.");
+            localStorage.removeItem('access_token');
         } finally {
             setIsLoading(false);
         }

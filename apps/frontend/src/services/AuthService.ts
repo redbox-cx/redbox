@@ -11,8 +11,13 @@ export const AuthService = {
         return data; 
     },
 
+    async logout() {
+        const { data } = await apiClient.post('/auth/logout');
+        return data;
+    },
+
     async getMe() {
-        const { data } = await apiClient.get('/auth/me');
+        const { data } = await apiClient.get('/user/profile');
         return data;
     }
 };

@@ -11,7 +11,9 @@ import { DashBoard } from "../pages/Dashboard";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, loading } = useAuth();
+
+    if (loading) return null;
 
     return (
         <Routes>
