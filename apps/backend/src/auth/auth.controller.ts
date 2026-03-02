@@ -111,7 +111,7 @@ export class AuthController{
     }
 
 
-    @Post('/change-password')
+    @Post('/password')
     @UseGuards(JwtAuthGuard)
     async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
         return this.authService.changePassword(req.user.id, dto);

@@ -1,10 +1,14 @@
-import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotFoundException, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { diskStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import { join } from 'path';
+import { Redis } from 'ioredis';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { pipeline } from 'stream/promises';
+import { create } from 'domain';
+import { InjectRedis } from '@nestjs-modules/ioredis';
 
 @Injectable()
 export class FilesService {
@@ -13,7 +17,10 @@ export class FilesService {
     private readonly tempFolder = join(this.uploadFolder, 'temp');
     private readonly MAX_QUOTA = 2 * 1024 * 1024 * 1024; // 2GB
 
-    constructor(private prisma: PrismaService) {
+    constructor(
+        private prisma: PrismaService,
+        @InjectRedis() private readonly redis: Redis 
+    ) {
         if (!fs.existsSync(this.tempFolder)) fs.mkdirSync(this.tempFolder, { recursive: true });
     }
 
@@ -44,19 +51,37 @@ export class FilesService {
         const finalStorageName = `${uuidv4()}.bin`;
         const finalPath = join(this.uploadFolder, finalStorageName);
 
+        // take masterkey from redis
+        const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
+        if (!masterKeyHex) throw new UnauthorizedException('Session expired, please log in again');
+        const masterKey = Buffer.from(masterKeyHex, 'hex');
+
+        // generate Iv for file (16 bytes for AES)
+        const fileIv = randomBytes(16);
+
         if (!fs.existsSync(userTempDir)) throw new NotFoundException('Chunks not found');
 
         const writeStream = fs.createWriteStream(finalPath);
+
+        writeStream.write(fileIv);
+        const cipher = createCipheriv('aes-256-cbc', masterKey, fileIv)
+
         try {
             for (let i = 0; i < totalChunks; i++) {
                 const chunkPath = join(userTempDir, i.toString());
-                if (!fs.existsSync(chunkPath)) throw new Error(`Missing chunk ${i}`);
-                await pipeline(fs.createReadStream(chunkPath), writeStream, { end: false });
+                const chunkContent = fs.readFileSync(chunkPath);
+                
+                // write files encrypted in stream
+                writeStream.write(cipher.update(chunkContent));
+                
                 fs.unlinkSync(chunkPath);
             }
+            writeStream.write(cipher.final());
             writeStream.end();
+
             fs.rmdirSync(userTempDir);
 
+            const stats = fs.statSync(finalPath);
             return await this.prisma.file.create({
                 data: {
                     originalName: fileName,
@@ -69,8 +94,32 @@ export class FilesService {
         } catch (error) {
             writeStream.end();
             this.cleanupPhysicalFile(finalPath);
-            throw new InternalServerErrorException('Merge failed');
+            throw new InternalServerErrorException('Merge & Encryption failed');
         }
+    }
+
+
+
+    async getDecryptionStream(userId: number, file: any) {
+        const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
+        if (!masterKeyHex) throw new UnauthorizedException('Session expired');
+        const masterKey = Buffer.from(masterKeyHex, 'hex');
+
+        const fullPath = join(this.uploadFolder, file.storageName);
+        const fileStream = fs.createReadStream(fullPath);
+
+        // read the first 16 Bytes (IV)
+        const fd = fs.openSync(fullPath, 'r');
+        const iv = Buffer.alloc(16);
+        fs.readSync(fd, iv, 0, 16, 0);
+        fs.closeSync(fd);
+
+        const decipher = createDecipheriv('aes-256-cbc', masterKey, iv);
+
+        // create new stream which skipps the first 16 Bytes
+        const dataStream = fs.createReadStream(fullPath, { start: 16 });
+
+        return { dataStream, decipher };
     }
 
 
@@ -141,6 +190,36 @@ export class FilesService {
     private cleanupPhysicalFile(path: string) {
         if (fs.existsSync(path)) fs.unlinkSync(path);
     }
+
+
+    // download-endpoint
+    async downloadFile(userId: number, fileId: string) {
+    const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('File not found');
+    if (file.userId !== userId) throw new ForbiddenException('Access denied');
+
+
+    const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
+    if (!masterKeyHex) throw new UnauthorizedException('Session expired');
+    const masterKey = Buffer.from(masterKeyHex, 'hex');
+
+    const fullPath = join(this.uploadFolder, file.storageName);
+    if (!fs.existsSync(fullPath)) throw new NotFoundException('Physical file missing');
+
+    const fd = fs.openSync(fullPath, 'r');
+    const iv = Buffer.alloc(16);
+    fs.readSync(fd, iv, 0, 16, 0);
+    fs.closeSync(fd);
+
+    const decipher = createDecipheriv('aes-256-cbc', masterKey, iv);
+    const dataStream = fs.createReadStream(fullPath, { start: 16 });
+
+    return {
+        stream: dataStream.pipe(decipher),
+        fileName: file.originalName,
+        mimeType: file.mimetype
+    };
+}
 }
 
 // Multer Storage Config

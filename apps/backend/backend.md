@@ -55,7 +55,7 @@ Exchanges a refresh token for a new pair of tokens.
 - **Auth:** `Bearer <refresh_token>`
 - **Frontend-To-Do:** Must be called automatically when an API call returns a `401 Unauthorized` error.
 
-### POST `/auth/change-password`
+### POST `/auth/password`
 
 Changes the password and invalidates all other active sessions.
 

@@ -3,7 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService, storageConfig } from './files.service';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
 import express from 'express';
-import { join } from 'path';
+import { pipeline } from 'stream/promises';
 
 @Controller('files')
 @UseGuards(JwtAuthGuard)
@@ -55,26 +55,13 @@ export class FilesController {
 
     // download endpoint
     @Get('download/:id')
-    async download(
-        @Param('id') id: string, 
-        @Req() req, 
-        @Res() res: express.Response
-    ) {
-        // ask service (proof of ownership / existence)
-        const file = await this.filesService.getFileRecordForUser(req.user.id, id);
+    async download(@Param('id') id: string, @Req() req, @Res() res: express.Response) {
 
-        // build path together
-        const filePath = join(
-            process.env.UPLOAD_LOCATION || './uploads', 
-            file.storageName
-        );
+        const { stream, fileName, mimeType } = await this.filesService.downloadFile(req.user.id, id);
 
-        // send file
-        return res.download(filePath, file.originalName, (err) => {
-            if (err) {
-                // if file is deleted but still in DB
-                throw new NotFoundException('File physical storage error');
-            }
-        });
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+        await pipeline(stream, res);
     }
 }

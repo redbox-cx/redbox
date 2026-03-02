@@ -6,8 +6,14 @@ import { LoginDto } from './dto/login-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { RegisterUsersDto } from './dto/register-user.dto';
 import { UserRole, UserStatus } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { randomUUID, scrypt, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { promisify } from 'util';
+import { Redis } from 'ioredis';
+import {InjectRedis} from '@nestjs-modules/ioredis';
+
+
+const scryptAsync = promisify(scrypt);
 
 
 @Injectable()
@@ -16,8 +22,45 @@ export class AuthService {
     constructor(
         private readonly prismaService: PrismaService,
         private jwtService: JwtService,
-        private readonly usersService: UsersService
+        private readonly usersService: UsersService,
+        @InjectRedis() private readonly redis: Redis 
     ){}
+
+    private async generateAndEncryptMasterKey(password: string) {
+        const masterKey = randomBytes(32); // the "real" 256-bit masterkey
+        const iv = randomBytes(16);        // random for encryption of masterkey
+        const salt = randomBytes(16);      // random for scrypt
+
+        // create derivedKey with password
+        const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
+        
+        // encrypt the masterkey with the derivedKey
+        const cipher = createCipheriv('aes-256-cbc', derivedKey, iv);
+        let encryptedKey = cipher.update(masterKey).toString('hex');
+        encryptedKey += cipher.final().toString('hex');
+
+        return {
+            encryptedKey,
+            iv: iv.toString('hex'),
+            salt: salt.toString('hex')
+        };
+    }
+
+    private async decryptMasterKey(password: string, user: any): Promise<Buffer> {
+        const salt = Buffer.from(user.masterKeySalt, 'hex');
+        const iv = Buffer.from(user.masterKeyIv, 'hex');
+        const encryptedKey = Buffer.from(user.encryptedMasterKey, 'hex');
+
+        // generate same derivedKey as before
+        const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
+
+        // decrypt
+        const decipher = createDecipheriv('aes-256-cbc', derivedKey, iv);
+        let decrypted = decipher.update(encryptedKey);
+        decrypted = Buffer.concat([decrypted, decipher.final()]);
+
+        return decrypted; // return real masterKey
+    }
 
 
     async getTokens(userId: number, username: string, sessionKey: string) {
@@ -63,6 +106,18 @@ export class AuthService {
             throw new UnauthorizedException('Invalid username or password')
         }
 
+        // decrypt masterKey
+        const masterKey = await this.decryptMasterKey(password, user);
+
+        // save masterKey in redis (session-based)
+        // sessionKey of user is part of the redis key
+        await this.redis.set(
+            `masterkey:${user.id}`, 
+            masterKey.toString('hex'), 
+            'EX', 3600 
+        );
+
+
         return this.getTokens(user.id, user.username, user.sessionKey);
     }
 
@@ -83,6 +138,9 @@ export class AuthService {
             throw new BadRequestException('Invalid or expired invite code')
         }
 
+        // generate the masterkey
+        const masterKeyData = await this.generateAndEncryptMasterKey(password);
+
 
         try {
             const result = await this.prismaService.$transaction(async (prisma) => {
@@ -94,7 +152,11 @@ export class AuthService {
                         password: hashedPassword,
                         role: UserRole.USER,
                         status: UserStatus.ACTIVE,
-                        sessionKey: randomUUID()
+                        sessionKey: randomUUID(),
+
+                        encryptedMasterKey: masterKeyData.encryptedKey,
+                        masterKeyIv: masterKeyData.iv,
+                        masterKeySalt: masterKeyData.salt
                     }
                 });
 
