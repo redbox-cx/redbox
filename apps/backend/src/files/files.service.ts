@@ -51,50 +51,57 @@ export class FilesService {
         const finalStorageName = `${uuidv4()}.bin`;
         const finalPath = join(this.uploadFolder, finalStorageName);
 
-        // take masterkey from redis
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
-        if (!masterKeyHex) throw new UnauthorizedException('Session expired, please log in again');
+        if (!masterKeyHex) throw new UnauthorizedException('Session expired');
         const masterKey = Buffer.from(masterKeyHex, 'hex');
-
-        // generate Iv for file (16 bytes for AES)
         const fileIv = randomBytes(16);
 
         if (!fs.existsSync(userTempDir)) throw new NotFoundException('Chunks not found');
 
         const writeStream = fs.createWriteStream(finalPath);
-
-        writeStream.write(fileIv);
-        const cipher = createCipheriv('aes-256-cbc', masterKey, fileIv)
+        
+        // promise
+        const streamFinished = new Promise<void>((resolve, reject) => {
+            writeStream.on('finish', () => resolve());
+            writeStream.on('error', (err) => reject(err));
+        });
 
         try {
+            writeStream.write(fileIv);
+            const cipher = createCipheriv('aes-256-cbc', masterKey, fileIv);
+
             for (let i = 0; i < totalChunks; i++) {
                 const chunkPath = join(userTempDir, i.toString());
                 const chunkContent = fs.readFileSync(chunkPath);
-                
-                // write files encrypted in stream
                 writeStream.write(cipher.update(chunkContent));
-                
                 fs.unlinkSync(chunkPath);
             }
+            
             writeStream.write(cipher.final());
-            writeStream.end();
+            writeStream.end(); // initalize closing
+
+            // wait until stream is finished
+            await streamFinished;
 
             fs.rmdirSync(userTempDir);
 
             const stats = fs.statSync(finalPath);
+            
             return await this.prisma.file.create({
                 data: {
                     originalName: fileName,
                     storageName: finalStorageName,
-                    size: fs.statSync(finalPath).size,
+                    size: stats.size,
                     mimetype: mimetype || 'application/octet-stream',
                     userId: userId,
                 },
             });
         } catch (error) {
-            writeStream.end();
+            // close stream if it remains open
+            writeStream.destroy();
             this.cleanupPhysicalFile(finalPath);
-            throw new InternalServerErrorException('Merge & Encryption failed');
+            console.error("Error:", error);
+            throw new InternalServerErrorException('Merge & Encryption failed: ' + error.message);
         }
     }
 

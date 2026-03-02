@@ -21,7 +21,7 @@ export class FilesController {
     // handshake start
     @Post('init')
     async init(@Req() req, @Body() body: { fileSize: number }) {
-        return this.filesService.initializeUpload(req.user.id, body.fileSize);
+        return this.filesService.initializeUpload(req.user.id || req.user.sub, body.fileSize);
     }
 
     // send chunks
