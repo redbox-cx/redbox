@@ -83,48 +83,66 @@ export class FilesService {
         return { message: `Chunk ${chunkIndex} accepted` };
     }
 
-    async finalizeUpload(userId: number, uploadId: string, fileName: string, totalChunks: number, mimetype: string) {
+    async finalizeUpload(
+        userId: number, 
+        uploadId: string, 
+        fileName: string, 
+        totalChunks: number, 
+        mimetype: string
+    ) {
         const userTempDir = join(this.tempFolder, `user_${userId}`, uploadId);
         const finalStorageName = `${uuidv4()}.bin`;
         const finalPath = join(this.uploadFolder, finalStorageName);
 
+        // key for encryption
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
-        if (!masterKeyHex) throw new UnauthorizedException('Session expired');
+        if (!masterKeyHex) throw new UnauthorizedException('Session expired (Masterkey missing)');
+        
         const masterKey = Buffer.from(masterKeyHex, 'hex');
         const fileIv = randomBytes(16);
 
-        if (!fs.existsSync(userTempDir)) throw new NotFoundException('Chunks not found');
+        // test chunks
+        if (!fs.existsSync(userTempDir)) {
+            throw new NotFoundException('Upload components not found. Maybe expired?');
+        }
 
         const writeStream = fs.createWriteStream(finalPath);
         
-        // promise
         const streamFinished = new Promise<void>((resolve, reject) => {
             writeStream.on('finish', () => resolve());
             writeStream.on('error', (err) => reject(err));
         });
 
         try {
+            // write IV
             writeStream.write(fileIv);
             const cipher = createCipheriv('aes-256-cbc', masterKey, fileIv);
 
+            // read, encrypt and save the chunks
             for (let i = 0; i < totalChunks; i++) {
                 const chunkPath = join(userTempDir, i.toString());
+                
+                if (!fs.existsSync(chunkPath)) {
+                    throw new BadRequestException(`Chunk index ${i} is missing`);
+                }
+
                 const chunkContent = fs.readFileSync(chunkPath);
                 writeStream.write(cipher.update(chunkContent));
+                
                 fs.unlinkSync(chunkPath);
             }
             
             writeStream.write(cipher.final());
-            writeStream.end(); // initalize closing
+            writeStream.end(); 
 
-            // wait until stream is finished
             await streamFinished;
 
+            // del temp dir
             fs.rmdirSync(userTempDir);
 
+            // create db entry
             const stats = fs.statSync(finalPath);
-            
-            return await this.prisma.file.create({
+            const fileRecord = await this.prisma.file.create({
                 data: {
                     originalName: fileName,
                     storageName: finalStorageName,
@@ -133,12 +151,27 @@ export class FilesService {
                     userId: userId,
                 },
             });
+
+            // redis cleanup
+            const metaKey = `upload:meta:${userId}:${uploadId}`;
+            await this.redis.del(metaKey);
+
+            this.logger.log(`File ${fileName} (ID: ${fileRecord.id}) successfully assembled for user ${userId}`);
+            
+            return fileRecord;
+
         } catch (error) {
-            // close stream if it remains open
+            // delete stream
             writeStream.destroy();
             this.cleanupPhysicalFile(finalPath);
-            console.error("Error:", error);
-            throw new InternalServerErrorException('Merge & Encryption failed: ' + error.message);
+            
+            this.logger.error(`Finalize failed: ${error.message}`);
+
+            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+                throw error;
+            }
+
+            throw new InternalServerErrorException('File assembly failed: ' + error.message);
         }
     }
 

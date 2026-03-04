@@ -2,8 +2,11 @@ import { Controller, Post, Patch, Delete, Get, Body, Req, UseGuards, UseIntercep
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService, storageConfig } from './files.service';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
-import express from 'express';
-import { pipeline } from 'stream/promises';
+import { GetUserId } from 'src/auth/decorator/get-user-id.decorator';
+import type { Response } from 'express';
+import { InitUploadDto } from './dto/init-upload.dto';
+import { UploadChunkDto } from './dto/upload-chunk.dto';
+import { CompleteUploadDto } from './dto/complete-upload.dto';
 
 @Controller('files')
 @UseGuards(JwtAuthGuard)
@@ -20,77 +23,58 @@ export class FilesController {
 
     // handshake start
     @Post('init')
-    async init(@Req() req, @Body() body: { fileSize: number, totalChunks: number }) {
-        return this.filesService.initializeUpload(
-        req.user.id || req.user.sub, 
-        body.fileSize, 
-        body.totalChunks
-    );
+    async init(@GetUserId() userId: number, @Body() dto: InitUploadDto) {
+        return this.filesService.initializeUpload(userId, dto.fileSize, dto.totalChunks);
     }
+
 
     // send chunks
     @Patch('upload-chunk/:uploadId')
     @UseInterceptors(FileInterceptor('file', storageConfig))
     async uploadChunk(
+        @GetUserId() userId: number,
         @Param('uploadId') uploadId: string,
         @UploadedFile() file: Express.Multer.File,
-        @Body('chunkIndex') chunkIndex: string,
-        @Req() req
+        @Body() dto: UploadChunkDto,
     ) {
-        return this.filesService.handleChunk(req.user.id, uploadId, file, parseInt(chunkIndex));
+        return this.filesService.handleChunk(userId, uploadId, file, dto.chunkIndex);
     }
 
     // merge chunks
     @Post('complete')
-    async complete(@Req() req, @Body() body: { uploadId: string; fileName: string; totalChunks: number; mimetype: string }) {
-        try {
-            const userId = req.user.id || req.user.sub;
-
-            // await for result
-            const fileRecord = await this.filesService.finalizeUpload(
-                userId, 
-                body.uploadId, 
-                body.fileName, 
-                body.totalChunks, 
-                body.mimetype
-            );
-
-            // if success: delete meta data in redis
-            await this.filesService['redis'].del(`upload:meta:${userId}:${body.uploadId}`);
-
-            return { 
-                status: 'Ok', 
-                message: 'File successfully stored.',
-                fileId: fileRecord.id,
-                fileName: fileRecord.originalName,
-                size: fileRecord.size
-            };
-        } catch (err) {
-            // catch error
-            console.error("Merge Error:", err);
-            return {
-                status: 'Error',
-                message: err.message || 'An unexpected error occurred during merging'
-            };
-        }
+    async complete(
+        @GetUserId() userId: number, 
+        @Body() dto: CompleteUploadDto
+    ) {
+        const file = await this.filesService.finalizeUpload(
+            userId, 
+            dto.uploadId, 
+            dto.fileName, 
+            dto.totalChunks, 
+            dto.mimetype
+        );
+        
+        return {
+            message: 'File successfully processed',
+            fileId: file.id
+        };
     }
 
     // delete endpoint
     @Delete(':id')
-    async delete(@Req() req, @Param('id') fileId: string) {
-        await this.filesService.deleteFile(req.user.id, fileId);
-        return { status: 'Ok', message: 'File deleted' };
+    async delete(@GetUserId() userId: number, @Param('id') fileId: string) {
+        return this.filesService.deleteFile(userId, fileId);
     }
 
     // download endpoint
     @Get('download/:id')
-    async download(@Param('id') id: string, @Req() req, @Res() res: express.Response) {
-
-        const { stream, fileName, mimeType } = await this.filesService.downloadFile(req.user.id, id);
+    async download(@GetUserId() userId: number, @Param('id') id: string, @Res() res: Response) {
+        const { stream, fileName, mimeType } = await this.filesService.downloadFile(userId, id);
 
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
+        const { pipeline } = require('stream/promises'); 
         await pipeline(stream, res);
     }
 }
