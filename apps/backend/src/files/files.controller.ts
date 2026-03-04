@@ -20,8 +20,12 @@ export class FilesController {
 
     // handshake start
     @Post('init')
-    async init(@Req() req, @Body() body: { fileSize: number }) {
-        return this.filesService.initializeUpload(req.user.id || req.user.sub, body.fileSize);
+    async init(@Req() req, @Body() body: { fileSize: number, totalChunks: number }) {
+        return this.filesService.initializeUpload(
+        req.user.id || req.user.sub, 
+        body.fileSize, 
+        body.totalChunks
+    );
     }
 
     // send chunks
@@ -39,11 +43,36 @@ export class FilesController {
     // merge chunks
     @Post('complete')
     async complete(@Req() req, @Body() body: { uploadId: string; fileName: string; totalChunks: number; mimetype: string }) {
-        // exec in background to prevent from timeouts
-        this.filesService.finalizeUpload(req.user.id, body.uploadId, body.fileName, body.totalChunks, body.mimetype)
-            .catch(err => console.error("Merge Error:", err));
+        try {
+            const userId = req.user.id || req.user.sub;
 
-        return { status: 'Processing' };
+            // await for result
+            const fileRecord = await this.filesService.finalizeUpload(
+                userId, 
+                body.uploadId, 
+                body.fileName, 
+                body.totalChunks, 
+                body.mimetype
+            );
+
+            // if success: delete meta data in redis
+            await this.filesService['redis'].del(`upload:meta:${userId}:${body.uploadId}`);
+
+            return { 
+                status: 'Ok', 
+                message: 'File successfully stored.',
+                fileId: fileRecord.id,
+                fileName: fileRecord.originalName,
+                size: fileRecord.size
+            };
+        } catch (err) {
+            // catch error
+            console.error("Merge Error:", err);
+            return {
+                status: 'Error',
+                message: err.message || 'An unexpected error occurred during merging'
+            };
+        }
     }
 
     // delete endpoint

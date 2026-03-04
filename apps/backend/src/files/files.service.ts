@@ -24,7 +24,8 @@ export class FilesService {
         if (!fs.existsSync(this.tempFolder)) fs.mkdirSync(this.tempFolder, { recursive: true });
     }
 
-    async initializeUpload(userId: number, fileSize: number) {
+    async initializeUpload(userId: number, fileSize: number, totalChunks: number) {
+        // 1. Quota Check
         const aggregation = await this.prisma.file.aggregate({
             where: { userId },
             _sum: { size: true },
@@ -34,16 +35,52 @@ export class FilesService {
         if (fileSize > this.MAX_QUOTA) throw new BadRequestException('File too large');
         if (currentUsage + fileSize > this.MAX_QUOTA) throw new BadRequestException('Quota exceeded');
 
-        return { uploadId: uuidv4() };
+        // generate id and save in uploadId var
+        const uploadId = uuidv4();
+
+        // meta data for redis
+        const uploadMetadata = {
+            totalChunks,
+            nextExpectedChunk: 0,
+            fileSize
+        };
+
+        // save in redis for 24h
+        await this.redis.set(
+            `upload:meta:${userId}:${uploadId}`, 
+            JSON.stringify(uploadMetadata), 
+            'EX', 86400
+        );
+
+        return { uploadId };
     }
 
     async handleChunk(userId: number, uploadId: string, file: Express.Multer.File, chunkIndex: number) {
+        const metaKey = `upload:meta:${userId}:${uploadId}`;
+        const metaStr = await this.redis.get(metaKey);
+
+        if (!metaStr) {
+            this.cleanupPhysicalFile(file.path);
+            throw new BadRequestException('Invalid or expired Upload ID');
+        }
+
+        const meta = JSON.parse(metaStr);
+
+        if (chunkIndex !== meta.nextExpectedChunk) {
+            this.cleanupPhysicalFile(file.path);
+            throw new BadRequestException(`Wrong chunk order. Expected index ${meta.nextExpectedChunk}`);
+        }
+
         const userTempDir = join(this.tempFolder, `user_${userId}`, uploadId);
         if (!fs.existsSync(userTempDir)) fs.mkdirSync(userTempDir, { recursive: true });
 
         const chunkPath = join(userTempDir, chunkIndex.toString());
         fs.renameSync(file.path, chunkPath);
-        return { message: 'Chunk accepted' };
+
+        meta.nextExpectedChunk++;
+        await this.redis.set(metaKey, JSON.stringify(meta), 'EX', 86400);
+
+        return { message: `Chunk ${chunkIndex} accepted` };
     }
 
     async finalizeUpload(userId: number, uploadId: string, fileName: string, totalChunks: number, mimetype: string) {

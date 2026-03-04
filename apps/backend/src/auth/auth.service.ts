@@ -111,10 +111,11 @@ export class AuthService {
 
         // save masterKey in redis (session-based)
         // sessionKey of user is part of the redis key
+        const sessionTtl = 60 * 60 * 24;
         await this.redis.set(
             `masterkey:${user.id}`, 
             masterKey.toString('hex'), 
-            'EX', 3600 
+            'EX', sessionTtl
         );
 
 
