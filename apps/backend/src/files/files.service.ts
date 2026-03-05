@@ -56,6 +56,11 @@ export class FilesService {
     }
 
     async handleChunk(userId: number, uploadId: string, file: Express.Multer.File, chunkIndex: number) {
+
+        if (!file || !file.path) {
+            throw new BadRequestException('File data is missing');
+        }
+
         const metaKey = `upload:meta:${userId}:${uploadId}`;
         const metaStr = await this.redis.get(metaKey);
 
@@ -66,16 +71,23 @@ export class FilesService {
 
         const meta = JSON.parse(metaStr);
 
-        if (chunkIndex !== meta.nextExpectedChunk) {
+        if (Number(chunkIndex) !== meta.nextExpectedChunk) {
             this.cleanupPhysicalFile(file.path);
-            throw new BadRequestException(`Wrong chunk order. Expected index ${meta.nextExpectedChunk}`);
+            throw new BadRequestException(`Wrong chunk order. Expected index ${meta.nextExpectedChunk}, got ${chunkIndex}`);
         }
 
         const userTempDir = join(this.tempFolder, `user_${userId}`, uploadId);
         if (!fs.existsSync(userTempDir)) fs.mkdirSync(userTempDir, { recursive: true });
 
         const chunkPath = join(userTempDir, chunkIndex.toString());
-        fs.renameSync(file.path, chunkPath);
+
+        try {
+            fs.renameSync(file.path, chunkPath);
+        } catch (err) {
+            this.logger.error(`Failed to move chunk: ${err.message}`);
+            throw new InternalServerErrorException('FileSystem Error');
+        }
+
 
         meta.nextExpectedChunk++;
         await this.redis.set(metaKey, JSON.stringify(meta), 'EX', 86400);

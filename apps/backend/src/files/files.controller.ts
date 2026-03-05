@@ -1,9 +1,14 @@
-import { Controller, Post, Patch, Delete, Get, Body, Req, UseGuards, UseInterceptors, UploadedFile, Param, Res, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { 
+    Controller, Post, Patch, Delete, Get, 
+    Body, UseGuards, UseInterceptors, UploadedFile, 
+    Param, Res 
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService, storageConfig } from './files.service';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
-import { GetUserId } from 'src/auth/decorator/get-user-id.decorator';
+import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import type { Response } from 'express';
+import { pipeline } from 'stream/promises';
 import { InitUploadDto } from './dto/init-upload.dto';
 import { UploadChunkDto } from './dto/upload-chunk.dto';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
@@ -16,15 +21,19 @@ export class FilesController {
 
     // get my files and quota
     @Get()
-    async listMyFiles(@Req() req) {
-        return this.filesService.getUserFilesWithQuota(req.user.id);
+    async listMyFiles(@GetUserId() userId: number) {
+        return this.filesService.getUserFilesWithQuota(userId);
     }
 
 
     // handshake start
     @Post('init')
     async init(@GetUserId() userId: number, @Body() dto: InitUploadDto) {
-        return this.filesService.initializeUpload(userId, dto.fileSize, dto.totalChunks);
+        const result = await this.filesService.initializeUpload(userId, dto.fileSize, dto.totalChunks);
+        return {
+            message: 'Upload initialized',
+            result
+        };
     }
 
 
@@ -37,7 +46,7 @@ export class FilesController {
         @UploadedFile() file: Express.Multer.File,
         @Body() dto: UploadChunkDto,
     ) {
-        return this.filesService.handleChunk(userId, uploadId, file, dto.chunkIndex);
+        return this.filesService.handleChunk(userId, uploadId, file, Number(dto.chunkIndex));
     }
 
     // merge chunks
@@ -55,26 +64,30 @@ export class FilesController {
         );
         
         return {
-            message: 'File successfully processed',
-            fileId: file.id
+            message: 'File successfully processed and encrypted',
+            result: { fileId: file.id }
         };
     }
 
     // delete endpoint
     @Delete(':id')
     async delete(@GetUserId() userId: number, @Param('id') fileId: string) {
-        return this.filesService.deleteFile(userId, fileId);
+        await this.filesService.deleteFile(userId, fileId);
+        return { message: 'File deleted successfully' };
     }
 
     // download endpoint
     @Get('download/:id')
-    async download(@GetUserId() userId: number, @Param('id') id: string, @Res() res: Response) {
+    async download(
+        @GetUserId() userId: number, 
+        @Param('id') id: string, 
+        @Res() res: Response
+    ) {
         const { stream, fileName, mimeType } = await this.filesService.downloadFile(userId, id);
 
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
-        const { pipeline } = require('stream/promises'); 
         await pipeline(stream, res);
     }
 }

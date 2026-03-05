@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, UseGuards, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guard/auth.guard';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
+import { GetUserId } from '../auth/decorator/get-user.decorator';
 
 
 
@@ -13,22 +14,38 @@ export class UsersController {
     ){}
 
     @Get('/profile')
-    async getProfile(@Req() req: any) {
-        return this.usersService.getProfile(req.user.id);
+    async getProfile(@GetUserId() userId: number) {
+        const profile = await this.usersService.getProfile(userId);
+        return {
+            message: 'Profile fetched successfully',
+            result: profile
+        };
     }
 
     @Post('/avatar')
-    async updateAvatar(@Req() req: any, @Body() dto: UpdateAvatarDto) {
-        return this.usersService.updateAvatar(req.user.id, dto.avatar);
+    async updateAvatar(@GetUserId() userId: number, @Body() dto: UpdateAvatarDto) {
+        const updatedUser = await this.usersService.updateAvatar(userId, dto.avatar);
+        return {
+            message: 'Avatar updated successfully',
+            result: updatedUser
+        };
     }
 
     @Post('/invites')
-    async generate(@Req() req: any) {
-        return this.usersService.generateInviteCode(req.user.id);
+    async generate(@GetUserId() userId: number) {
+        const newInvite = await this.usersService.generateInviteCode(userId);
+        return {
+            message: 'Invite code generated',
+            result: newInvite
+        };
     }
 
     @Get('/invites')
-    async getMyInvites(@Req() req: any) {
-        return this.usersService.getMyInvites(req.user.id);
+    async getMyInvites(@GetUserId() userId: number) {
+        const invites = await this.usersService.getMyInvites(userId);
+        return {
+            message: 'Your invite codes',
+            result: invites
+        };
     }
 }
