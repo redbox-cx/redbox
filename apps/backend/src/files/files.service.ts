@@ -143,10 +143,13 @@ export class FilesService {
         }
     }
 
-    async downloadFile(fileId: string, providedPassword?: string) {
+    async downloadFile(fileId: string, token: string, providedPassword?: string) {
         // search file
         const file = await this.prisma.file.findUnique({ where: { id: fileId } });
-        if (!file) throw new NotFoundException('File not found');
+        
+        if (!file || file.shareToken !== token) {
+            throw new NotFoundException('File not found or invalid token');
+        }
 
         // test expiry
         if (new Date() > file.expiresAt) {
@@ -156,10 +159,7 @@ export class FilesService {
 
         // password-gatekeeper
         if (file.passwordHash) {
-            if (!providedPassword) {
-                // 403 
-                throw new ForbiddenException('This file is password protected');
-            }
+            if (!providedPassword) throw new ForbiddenException('This file is password protected');
             const isMatch = await bcrypt.compare(providedPassword, file.passwordHash);
             if (!isMatch) throw new ForbiddenException('Incorrect password');
         }
@@ -189,6 +189,7 @@ export class FilesService {
                 mimetype: true,
                 createdAt: true,
                 expiresAt: true,
+                shareToken: true,
             }
         });
 

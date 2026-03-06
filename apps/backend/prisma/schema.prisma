@@ -59,16 +59,17 @@ model InviteCode {
 }
 
 model File {
-  id           String   @id @default(uuid())
+  id           String @id @default(uuid())
   originalName String
-  storageName  String   @unique // uuid
+  storageName  String @unique // uuid
   size         Int // size in bytes for check
   mimetype     String // mimetype (e.g. image/jpeg, application/pdf etc...)
   userId       Int
-  user         User     @relation(fields: [userId], references: [id])
+  user         User   @relation(fields: [userId], references: [id])
 
-  createdAt    DateTime @default(now())
-  expiresAt    DateTime
+  createdAt DateTime @default(now())
+  expiresAt DateTime
 
+  shareToken   String  @unique @default(uuid())
   passwordHash String? @db.VarChar(100)
 }

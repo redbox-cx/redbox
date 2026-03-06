@@ -3,7 +3,8 @@ import {
     Body, UseGuards, UseInterceptors, UploadedFile, 
     Param, Res, 
     Query,
-    StreamableFile
+    StreamableFile,
+    BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService, storageConfig } from './files.service';
@@ -74,8 +75,8 @@ export class FilesController {
         );
         
         return {
-            message: 'File successfully processed and encrypted',
-            result: { fileId: file.id }
+            message: 'File successfully processed',
+            result: { fileId: file.id, shareToken: file.shareToken }
         };
     }
 
@@ -91,10 +92,12 @@ export class FilesController {
     @Get('download/:id')
     async download(
         @Param('id') id: string,
+        @Query('token') token: string,
         @Res({ passthrough: true }) res: Response,
         @Query('password') password?: string
     ) {
-        const fileData = await this.filesService.downloadFile(id, password);
+        if (!token) throw new BadRequestException('Share token is required');
+        const fileData = await this.filesService.downloadFile(id, token, password);
 
         // headers
         res.set({
