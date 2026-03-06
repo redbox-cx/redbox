@@ -1,7 +1,9 @@
 import { 
     Controller, Post, Patch, Delete, Get, 
     Body, UseGuards, UseInterceptors, UploadedFile, 
-    Param, Res 
+    Param, Res, 
+    Query,
+    StreamableFile
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService, storageConfig } from './files.service';
@@ -14,13 +16,13 @@ import { UploadChunkDto } from './dto/upload-chunk.dto';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
 
 @Controller('files')
-@UseGuards(JwtAuthGuard)
 export class FilesController {
     constructor(private readonly filesService: FilesService) {}
 
 
     // get my files and quota
     @Get()
+    @UseGuards(JwtAuthGuard)
     async listMyFiles(@GetUserId() userId: number) {
         return this.filesService.getUserFilesWithQuota(userId);
     }
@@ -28,8 +30,14 @@ export class FilesController {
 
     // handshake start
     @Post('init')
+    @UseGuards(JwtAuthGuard)
     async init(@GetUserId() userId: number, @Body() dto: InitUploadDto) {
-        const result = await this.filesService.initializeUpload(userId, dto.fileSize, dto.totalChunks);
+        const result = await this.filesService.initializeUpload(
+            userId, 
+            dto.fileSize, 
+            dto.totalChunks, 
+            dto.password
+        );
         return {
             message: 'Upload initialized',
             result
@@ -39,6 +47,7 @@ export class FilesController {
 
     // send chunks
     @Patch('upload-chunk/:uploadId')
+    @UseGuards(JwtAuthGuard)
     @UseInterceptors(FileInterceptor('file', storageConfig))
     async uploadChunk(
         @GetUserId() userId: number,
@@ -51,6 +60,7 @@ export class FilesController {
 
     // merge chunks
     @Post('complete')
+    @UseGuards(JwtAuthGuard)
     async complete(
         @GetUserId() userId: number, 
         @Body() dto: CompleteUploadDto
@@ -71,6 +81,7 @@ export class FilesController {
 
     // delete endpoint
     @Delete(':id')
+    @UseGuards(JwtAuthGuard)
     async delete(@GetUserId() userId: number, @Param('id') fileId: string) {
         await this.filesService.deleteFile(userId, fileId);
         return { message: 'File deleted successfully' };
@@ -79,15 +90,18 @@ export class FilesController {
     // download endpoint
     @Get('download/:id')
     async download(
-        @GetUserId() userId: number, 
-        @Param('id') id: string, 
-        @Res() res: Response
+        @Param('id') id: string,
+        @Res({ passthrough: true }) res: Response,
+        @Query('password') password?: string
     ) {
-        const { stream, fileName, mimeType } = await this.filesService.downloadFile(userId, id);
+        const fileData = await this.filesService.downloadFile(id, password);
 
-        res.setHeader('Content-Type', mimeType);
-        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        // headers
+        res.set({
+            'Content-Type': fileData.mimeType,
+            'Content-Disposition': `attachment; filename="${fileData.fileName}"`,
+        });
 
-        await pipeline(stream, res);
+        return new StreamableFile(fileData.stream);
     }
 }

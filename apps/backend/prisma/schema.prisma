@@ -48,10 +48,6 @@ model User {
   issuedCodes    Int          @default(0) // amount of codes the user made
   generatedCodes InviteCode[] @relation("GeneratedBy")
   files          File[]
-
-  encryptedMasterKey String? @db.Text // with pw encrypted sessionKey
-  masterKeyIv String? @db.VarChar(50) // Initialization Vector for masterkey
-  masterKeySalt      String? @db.VarChar(50) // salt for masterkey
 }
 
 model InviteCode {
@@ -70,5 +66,9 @@ model File {
   mimetype     String // mimetype (e.g. image/jpeg, application/pdf etc...)
   userId       Int
   user         User     @relation(fields: [userId], references: [id])
+
   createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  passwordHash String? @db.VarChar(100)
 }

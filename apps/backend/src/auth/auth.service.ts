@@ -26,42 +26,6 @@ export class AuthService {
         @InjectRedis() private readonly redis: Redis 
     ){}
 
-    private async generateAndEncryptMasterKey(password: string) {
-        const masterKey = randomBytes(32); // the "real" 256-bit masterkey
-        const iv = randomBytes(16);        // random for encryption of masterkey
-        const salt = randomBytes(16);      // random for scrypt
-
-        // create derivedKey with password
-        const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
-        
-        // encrypt the masterkey with the derivedKey
-        const cipher = createCipheriv('aes-256-cbc', derivedKey, iv);
-        let encryptedKey = cipher.update(masterKey).toString('hex');
-        encryptedKey += cipher.final().toString('hex');
-
-        return {
-            encryptedKey,
-            iv: iv.toString('hex'),
-            salt: salt.toString('hex')
-        };
-    }
-
-    private async decryptMasterKey(password: string, user: any): Promise<Buffer> {
-        const salt = Buffer.from(user.masterKeySalt, 'hex');
-        const iv = Buffer.from(user.masterKeyIv, 'hex');
-        const encryptedKey = Buffer.from(user.encryptedMasterKey, 'hex');
-
-        // generate same derivedKey as before
-        const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
-
-        // decrypt
-        const decipher = createDecipheriv('aes-256-cbc', derivedKey, iv);
-        let decrypted = decipher.update(encryptedKey);
-        decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-        return decrypted; // return real masterKey
-    }
-
 
     async getTokens(userId: number, username: string, sessionKey: string) {
 
@@ -106,63 +70,38 @@ export class AuthService {
             throw new UnauthorizedException('Invalid username or password')
         }
 
-        // decrypt masterKey
-        const masterKey = await this.decryptMasterKey(password, user);
-
-        // save masterKey in redis (session-based)
-        // sessionKey of user is part of the redis key
-        const sessionTtl = 60 * 60 * 24;
-        await this.redis.set(
-            `masterkey:${user.id}`, 
-            masterKey.toString('hex'), 
-            'EX', sessionTtl
-        );
-
-
         return this.getTokens(user.id, user.username, user.sessionKey);
     }
 
 
-    async register (createDto: RegisterUsersDto): Promise<any>{
-
+    async register(createDto: RegisterUsersDto): Promise<any> {
         const { username, password, inviteCode } = createDto;
 
+        // invite code validation
         const invite = await this.prismaService.inviteCode.findUnique({
-            where: {code: inviteCode}
+            where: { code: inviteCode }
         });
 
-        if (!invite) {
-            throw new UnauthorizedException('Invalid or expired invite code')
+        if (!invite || invite.usage <= 0) {
+            throw new UnauthorizedException('Invalid or expired invite code');
         }
-
-        if (invite.usage <= 0) {
-            throw new BadRequestException('Invalid or expired invite code')
-        }
-
-        // generate the masterkey
-        const masterKeyData = await this.generateAndEncryptMasterKey(password);
-
 
         try {
+            // transaction: create user and count -1 code usage
             const result = await this.prismaService.$transaction(async (prisma) => {
                 const hashedPassword = await bcrypt.hash(password, 13);
-
                 const newUser = await prisma.user.create({
                     data: {
                         username,
                         password: hashedPassword,
                         role: UserRole.USER,
                         status: UserStatus.ACTIVE,
-                        sessionKey: randomUUID(),
-
-                        encryptedMasterKey: masterKeyData.encryptedKey,
-                        masterKeyIv: masterKeyData.iv,
-                        masterKeySalt: masterKeyData.salt
+                        sessionKey: randomUUID()
                     }
                 });
 
                 await prisma.inviteCode.update({
-                    where: {id: invite.id},
+                    where: { id: invite.id },
                     data: { usage: { decrement: 1 } }
                 });
 
@@ -172,7 +111,9 @@ export class AuthService {
             return this.getTokens(result.id, result.username, result.sessionKey);
 
         } catch (error) {
-            if (error.code === 'P2002') throw new ConflictException('Username already taken')
+            if (error.code === 'P2002') {
+                throw new ConflictException('Username already taken');
+            }
             throw new BadRequestException('Registration failed');
         }
     }
