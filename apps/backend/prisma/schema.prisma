@@ -48,6 +48,10 @@ model User {
   issuedCodes    Int          @default(0) // amount of codes the user made
   generatedCodes InviteCode[] @relation("GeneratedBy")
   files          File[]
+
+  encryptedMasterKey String? @db.Text
+  masterKeyIv        String? @db.VarChar(50)
+  masterKeySalt      String? @db.VarChar(50)
 }
 
 model InviteCode {
@@ -72,4 +76,7 @@ model File {
 
   shareToken   String  @unique @default(uuid())
   passwordHash String? @db.VarChar(100)
+
+  encryptedFileKey String @db.Text // File-Secret, encrypted with masterkey
+  fileKeyIv        String @db.VarChar(50) // IV for encryption of file-key
 }

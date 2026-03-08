@@ -27,6 +27,36 @@ export class AuthService {
     ){}
 
 
+    private async generateMasterKeyStore(password: string) {
+        const masterKey = randomBytes(32); 
+        const iv = randomBytes(16);
+        const salt = randomBytes(16);
+        const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
+        const cipher = createCipheriv('aes-256-cbc', derivedKey, iv);
+        let encrypted = cipher.update(masterKey).toString('hex');
+        encrypted += cipher.final().toString('hex');
+        return { encrypted, iv: iv.toString('hex'), salt: salt.toString('hex'), rawMasterKey: masterKey };
+    }
+
+    private async decryptMasterKey(password: string, user: any) {
+        const derivedKey = (await scryptAsync(password, Buffer.from(user.masterKeySalt, 'hex'), 32)) as Buffer;
+        const decipher = createDecipheriv('aes-256-cbc', derivedKey, Buffer.from(user.masterKeyIv, 'hex'));
+        let decrypted = decipher.update(Buffer.from(user.encryptedMasterKey, 'hex'));
+        decrypted = Buffer.concat([decrypted, decipher.final()]);
+        return decrypted;
+    }
+
+    private async reEncryptMasterKey(rawMasterKey: Buffer, newPassword: string) {
+        const iv = randomBytes(16);
+        const salt = randomBytes(16);
+        const derivedKey = (await scryptAsync(newPassword, salt, 32)) as Buffer;
+        const cipher = createCipheriv('aes-256-cbc', derivedKey, iv);
+        let encrypted = cipher.update(rawMasterKey).toString('hex');
+        encrypted += cipher.final().toString('hex');
+        return { encrypted, iv: iv.toString('hex'), salt: salt.toString('hex') };
+    }
+
+
     async getTokens(userId: number, username: string, sessionKey: string) {
 
         const payload = { sub: userId, username, sessionKey };
@@ -70,6 +100,9 @@ export class AuthService {
             throw new UnauthorizedException('Invalid username or password')
         }
 
+        const masterKey = await this.decryptMasterKey(loginDto.password, user);
+        await this.redis.set(`masterkey:${user.id}`, masterKey.toString('hex'), 'EX', 86400);
+
         return this.getTokens(user.id, user.username, user.sessionKey);
     }
 
@@ -86,18 +119,21 @@ export class AuthService {
             throw new UnauthorizedException('Invalid or expired invite code');
         }
 
+        const mk = await this.generateMasterKeyStore(createDto.password);
+        
         try {
             // transaction: create user and count -1 code usage
             const result = await this.prismaService.$transaction(async (prisma) => {
-                const hashedPassword = await bcrypt.hash(password, 13);
                 const newUser = await prisma.user.create({
                     data: {
-                        username,
-                        password: hashedPassword,
-                        role: UserRole.USER,
-                        status: UserStatus.ACTIVE,
-                        sessionKey: randomUUID()
-                    }
+                        username: createDto.username,
+                        password: await bcrypt.hash(createDto.password, 13),
+                        sessionKey: randomUUID(),
+                        encryptedMasterKey: mk.encrypted,
+                        masterKeyIv: mk.iv,
+                        masterKeySalt: mk.salt,
+                        issuedCodes: 0,
+                }
                 });
 
                 await prisma.inviteCode.update({
@@ -108,6 +144,7 @@ export class AuthService {
                 return newUser;
             });
 
+            await this.redis.set(`masterkey:${result.id}`, mk.rawMasterKey.toString('hex'), 'EX', 86400);
             return this.getTokens(result.id, result.username, result.sessionKey);
 
         } catch (error) {
@@ -155,14 +192,19 @@ export class AuthService {
 
         const pwMatches = await bcrypt.compare(dto.oldPassword, user.password);
         if (!pwMatches) throw new UnauthorizedException('Old password incorrect');
+        
+        const rawMasterKey = await this.decryptMasterKey(dto.oldPassword, user);
 
-        const hashedPassword = await bcrypt.hash(dto.newPassword, 13);
+        const newMkStore = await this.reEncryptMasterKey(rawMasterKey, dto.newPassword);
 
         await this.prismaService.user.update({
             where: { id: userId },
             data: {
-                password: hashedPassword,
-                sessionKey: randomUUID(),
+                password: await bcrypt.hash(dto.newPassword, 13),
+                sessionKey: randomUUID(), // kick old sessions
+                encryptedMasterKey: newMkStore.encrypted,
+                masterKeyIv: newMkStore.iv,
+                masterKeySalt: newMkStore.salt
             },
         });
 

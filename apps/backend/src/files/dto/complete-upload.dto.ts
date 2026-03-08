@@ -17,4 +17,8 @@ export class CompleteUploadDto {
     @IsString()
     @IsOptional()
     mimetype: string;
+
+    @IsString()
+    @IsNotEmpty()
+    fileKey: string; 
 }

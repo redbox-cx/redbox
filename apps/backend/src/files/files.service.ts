@@ -5,11 +5,12 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import { join } from 'path';
 import { Redis } from 'ioredis';
-import { pipeline } from 'stream/promises';
+import { pipeline, finished } from 'stream/promises';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as bcrypt from 'bcryptjs';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { addDays } from 'date-fns';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
 @Injectable()
 export class FilesService {
@@ -26,7 +27,7 @@ export class FilesService {
     }
 
     async initializeUpload(userId: number, fileSize: number, totalChunks: number, password?: string) {
-        // 1. Quota Check
+        // Quota Check
         const aggregation = await this.prisma.file.aggregate({
             where: { userId },
             _sum: { size: true },
@@ -51,7 +52,6 @@ export class FilesService {
         };
 
         await this.redis.set(`upload:meta:${userId}:${uploadId}`, JSON.stringify(uploadMetadata), 'EX', 86400);
-
         return { uploadId };
     }
 
@@ -85,38 +85,42 @@ export class FilesService {
         return { message: `Chunk ${chunkIndex} accepted` };
     }
 
-    async finalizeUpload(userId: number, uploadId: string, fileName: string, totalChunks: number, mimetype: string) {
+    async finalizeUpload(userId: number, uploadId: string, fileName: string, totalChunks: number, mimetype: string, fileKeyFromFrontend: string) {
+
+        const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
+        if (!masterKeyHex) throw new UnauthorizedException('Session expired');
+        const masterKey = Buffer.from(masterKeyHex, 'hex');
+
+        const fileKeyIv = randomBytes(16);
+        const cipher = createCipheriv('aes-256-cbc', masterKey, fileKeyIv);
+        let encryptedFileKey = cipher.update(fileKeyFromFrontend, 'utf8', 'hex');
+        encryptedFileKey += cipher.final('hex');
+
+
         const userTempDir = join(this.tempFolder, `user_${userId}`, uploadId);
         const finalStorageName = `${uuidv4()}.bin`;
         const finalPath = join(this.uploadFolder, finalStorageName);
 
         const metaStr = await this.redis.get(`upload:meta:${userId}:${uploadId}`);
-        if (!metaStr) throw new BadRequestException('Metadata not found or expired');
+        if (!metaStr) throw new BadRequestException('Metadata expired');
         const meta = JSON.parse(metaStr);
 
-        if (!fs.existsSync(userTempDir)) throw new NotFoundException('Chunks not found');
-
         const writeStream = fs.createWriteStream(finalPath);
-        const streamFinished = new Promise<void>((resolve, reject) => {
-            writeStream.on('finish', () => resolve());
-            writeStream.on('error', (err) => reject(err));
-        });
 
         try {
             for (let i = 0; i < totalChunks; i++) {
                 const chunkPath = join(userTempDir, i.toString());
-                
-                if (!fs.existsSync(chunkPath)) {
-                    throw new Error(`Chunk ${i} missing`);
-                }
+                if (!fs.existsSync(chunkPath)) throw new Error(`Chunk ${i} fehlt`);
+
                 const readStream = fs.createReadStream(chunkPath);
                 await pipeline(readStream, writeStream, { end: false });
-
+                
                 fs.unlinkSync(chunkPath);
             }
-            
+
             writeStream.end();
-            await streamFinished;
+
+            await new Promise<void>((resolve) => writeStream.on('finish', () => resolve()));
 
             fs.rmdirSync(userTempDir);
 
@@ -125,21 +129,20 @@ export class FilesService {
                     originalName: fileName,
                     storageName: finalStorageName,
                     size: fs.statSync(finalPath).size,
-                    mimetype: mimetype,
-                    userId: userId,
+                    mimetype,
+                    userId,
                     passwordHash: meta.passwordHash,
                     expiresAt: addDays(new Date(), 30),
+                    encryptedFileKey,
+                    fileKeyIv: fileKeyIv.toString('hex')
                 },
             });
 
             await this.redis.del(`upload:meta:${userId}:${uploadId}`);
             return fileRecord;
-
         } catch (error) {
             if (writeStream) writeStream.destroy();
-            this.cleanupPhysicalFile(finalPath);
-            this.logger.error(`Merge failed: ${error.message}`);
-            throw new InternalServerErrorException('Merge failed: ' + error.message);
+            throw new InternalServerErrorException('Finalize failed');
         }
     }
 
@@ -177,33 +180,39 @@ export class FilesService {
         };
     }
 
-    // helpfunction for quota in frontend
+    // helpfunction for quota in frontend + decryption-key
     async getUserFilesWithQuota(userId: number) {
+        const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
+        if (!masterKeyHex) throw new UnauthorizedException('Session expired');
+        const masterKey = Buffer.from(masterKeyHex, 'hex');
+
         const files = await this.prisma.file.findMany({
             where: { userId },
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                originalName: true,
-                size: true,
-                mimetype: true,
-                createdAt: true,
-                expiresAt: true,
-                shareToken: true,
-            }
+            orderBy: { createdAt: 'desc' }
         });
 
-        const aggregation = await this.prisma.file.aggregate({
-            where: { userId },
-            _sum: { size: true },
+        const processedFiles = files.map(file => {
+            let decryptedKey = "";
+            try {
+                const decipher = createDecipheriv('aes-256-cbc', masterKey, Buffer.from(file.fileKeyIv, 'hex'));
+                decryptedKey = decipher.update(file.encryptedFileKey, 'hex', 'utf8');
+                decryptedKey += decipher.final('utf8');
+            } catch (e) { decryptedKey = "error"; }
+
+            return {
+                id: file.id,
+                originalName: file.originalName,
+                size: file.size,
+                mimetype: file.mimetype,
+                createdAt: file.createdAt,
+                expiresAt: file.expiresAt,
+                shareLink: `/${file.id}?token=${file.shareToken}#${decryptedKey}`
+            };
         });
 
-        return {
-            files,
-            totalUsed: aggregation._sum.size || 0
-        };
+        const aggregation = await this.prisma.file.aggregate({ where: { userId }, _sum: { size: true } });
+        return { files: processedFiles, totalUsed: aggregation._sum.size || 0 };
     }
-
     // --- CLEANUP & MAINTENANCE ---
 
     @Cron(CronExpression.EVERY_HOUR)

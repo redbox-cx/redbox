@@ -71,7 +71,8 @@ export class FilesController {
             dto.uploadId, 
             dto.fileName, 
             dto.totalChunks, 
-            dto.mimetype
+            dto.mimetype,
+            dto.fileKey
         );
         
         return {
