@@ -37,17 +37,19 @@ enum UserAvatar {
 }
 
 model User {
-  id             Int          @id @default(autoincrement())
-  username       String       @unique @db.VarChar(50)
-  password       String       @db.VarChar(100)
-  avatar         UserAvatar   @default(DEFAULT_AVATAR)
-  status         UserStatus   @default(ACTIVE) // accountstatus enum
-  role           UserRole     @default(USER) // accountrole enum
-  sessionKey     String       @default(uuid())
-  createdAt      DateTime     @default(now())
-  issuedCodes    Int          @default(0) // amount of codes the user made
+  id          Int        @id @default(autoincrement())
+  username    String     @unique @db.VarChar(50)
+  password    String     @db.VarChar(100)
+  avatar      UserAvatar @default(DEFAULT_AVATAR)
+  status      UserStatus @default(ACTIVE) // accountstatus enum
+  role        UserRole   @default(USER) // accountrole enum
+  sessionKey  String     @default(uuid())
+  createdAt   DateTime   @default(now())
+  issuedCodes Int        @default(0) // amount of codes the user made
+
   generatedCodes InviteCode[] @relation("GeneratedBy")
   files          File[]
+  links          Link[]
 
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
@@ -79,4 +81,13 @@ model File {
 
   encryptedFileKey String @db.Text // File-Secret, encrypted with masterkey
   fileKeyIv        String @db.VarChar(50) // IV for encryption of file-key
+}
+
+model Link {
+  id          Int      @id @default(autoincrement())
+  originalUrl String   @db.Text
+  shortCode   String   @unique @db.VarChar(10)
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
 }

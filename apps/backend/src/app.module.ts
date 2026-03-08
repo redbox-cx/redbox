@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma.module';
 import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { RedisModule } from '@nestjs-modules/ioredis';
+import { LinksModule } from './links/links.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { RedisModule } from '@nestjs-modules/ioredis';
     UsersModule,
     AuthModule,
     FilesModule,
+    LinksModule,
   ],
   controllers: [],
   providers: [],
