@@ -8,7 +8,7 @@ export class InitUploadDto {
 
     @IsInt()
     @Min(1)
-    @Max(1000) // max 100 chunks
+    @Max(100) // max 100 chunks
     totalChunks: number;
 
     @IsString()

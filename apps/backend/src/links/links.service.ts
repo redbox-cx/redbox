@@ -17,6 +17,9 @@ export class LinksService {
       throw new BadRequestException(`You have reached the limit of ${linkLimit} links.`);
     }
 
+    let normalizedUrl = url.trim();
+  
+
     // generate short code
     const shortCode = randomBytes(3).toString('hex');
 

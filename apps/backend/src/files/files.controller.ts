@@ -47,7 +47,7 @@ export class FilesController {
 
 
     // send chunks
-    @Patch('upload-chunk/:uploadId')
+    @Patch('upload/:uploadId')
     @UseGuards(JwtAuthGuard)
     @UseInterceptors(FileInterceptor('file', storageConfig))
     async uploadChunk(
