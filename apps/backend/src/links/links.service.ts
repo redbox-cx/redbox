@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { randomBytes } from 'crypto';
 
@@ -38,6 +38,35 @@ export class LinksService {
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async delete(userId: number, linkIdAsString: string) {
+    // id validation
+    const linkId = parseInt(linkIdAsString, 10);
+    if (isNaN(linkId)) {
+      throw new BadRequestException('Invalid ID format. ID must be a number.');
+    }
+
+    // find link + check permissions
+    const link = await this.prisma.link.findUnique({
+      where: { id: linkId },
+      select: { userId: true },
+    });
+
+    if (!link) {
+      throw new NotFoundException(`Link with ID ${linkId} not found.`);
+    }
+
+    if (link.userId !== userId) {
+      throw new ForbiddenException(`Link with ID ${linkId} not found.`);
+    }
+
+    // delete
+    await this.prisma.link.delete({
+      where: { id: linkId },
+    });
+
+    return { message: 'Link successfully deleted' };
   }
 
   async getOriginalUrl(code: string) {
