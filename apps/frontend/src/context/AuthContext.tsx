@@ -4,6 +4,9 @@ import { AuthService } from '../services/AuthService';
 interface User {
     username: string;
     avatar: string;
+    role: string;
+    issuedCodes: number;
+    createdAt: string;
 }
 
 interface AuthContextType {
@@ -29,8 +32,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             try {
-                const data = await AuthService.getMe();
-                setUser(data);
+                const response = await AuthService.getMe();
+                setUser(response.result); 
             } catch (err) {
                 localStorage.removeItem('access_token');
                 localStorage.removeItem('refresh_token');

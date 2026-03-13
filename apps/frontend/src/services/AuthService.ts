@@ -18,6 +18,6 @@ export const AuthService = {
 
     async getMe() {
         const { data } = await apiClient.get('/user/profile');
-        return data;
+        return data.result; 
     }
 };
