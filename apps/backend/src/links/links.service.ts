@@ -6,7 +6,7 @@ import { randomBytes } from 'crypto';
 export class LinksService {
   constructor(private prisma: PrismaService) {}
 
-  async create(userId: number, url: string) {
+  async create(userId: string, url: string) {
     const count = await this.prisma.link.count({
       where: { userId },
     });
@@ -33,20 +33,15 @@ export class LinksService {
     });
   }
 
-  async findAllByUser(userId: number) {
+  async findAllByUser(userId: string) {
     return this.prisma.link.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async delete(userId: number, linkIdAsString: string) {
-    // id validation
-    const linkId = parseInt(linkIdAsString, 10);
-    if (isNaN(linkId)) {
-      throw new BadRequestException('Invalid ID format. ID must be a number.');
-    }
-
+  async delete(userId: string, linkId: string) {
+    
     // find link + check permissions
     const link = await this.prisma.link.findUnique({
       where: { id: linkId },

@@ -14,7 +14,7 @@ export class UsersController {
     ){}
 
     @Get('/profile')
-    async getProfile(@GetUserId() userId: number) {
+    async getProfile(@GetUserId() userId: string) {
         const profile = await this.usersService.getProfile(userId);
         return {
             message: 'Profile fetched successfully',
@@ -23,7 +23,7 @@ export class UsersController {
     }
 
     @Post('/avatar')
-    async updateAvatar(@GetUserId() userId: number, @Body() dto: UpdateAvatarDto) {
+    async updateAvatar(@GetUserId() userId: string, @Body() dto: UpdateAvatarDto) {
         const updatedUser = await this.usersService.updateAvatar(userId, dto.avatar);
         return {
             message: 'Avatar updated successfully',
@@ -32,7 +32,7 @@ export class UsersController {
     }
 
     @Post('/invites')
-    async generate(@GetUserId() userId: number) {
+    async generate(@GetUserId() userId: string) {
         const newInvite = await this.usersService.generateInviteCode(userId);
         return {
             message: 'Invite code generated',
@@ -41,7 +41,7 @@ export class UsersController {
     }
 
     @Get('/invites')
-    async getMyInvites(@GetUserId() userId: number) {
+    async getMyInvites(@GetUserId() userId: string) {
         const invites = await this.usersService.getMyInvites(userId);
         return {
             message: 'Your invite codes',

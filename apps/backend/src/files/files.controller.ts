@@ -24,7 +24,7 @@ export class FilesController {
     // get my files and quota
     @Get()
     @UseGuards(JwtAuthGuard)
-    async listMyFiles(@GetUserId() userId: number) {
+    async listMyFiles(@GetUserId() userId: string) {
         return this.filesService.getUserFilesWithQuota(userId);
     }
 
@@ -32,7 +32,7 @@ export class FilesController {
     // handshake start
     @Post('init')
     @UseGuards(JwtAuthGuard)
-    async init(@GetUserId() userId: number, @Body() dto: InitUploadDto) {
+    async init(@GetUserId() userId: string, @Body() dto: InitUploadDto) {
         const result = await this.filesService.initializeUpload(
             userId, 
             dto.fileSize, 
@@ -51,7 +51,7 @@ export class FilesController {
     @UseGuards(JwtAuthGuard)
     @UseInterceptors(FileInterceptor('file', storageConfig))
     async uploadChunk(
-        @GetUserId() userId: number,
+        @GetUserId() userId: string,
         @Param('uploadId') uploadId: string,
         @UploadedFile() file: Express.Multer.File,
         @Body() dto: UploadChunkDto,
@@ -63,7 +63,7 @@ export class FilesController {
     @Post('complete')
     @UseGuards(JwtAuthGuard)
     async complete(
-        @GetUserId() userId: number, 
+        @GetUserId() userId: string, 
         @Body() dto: CompleteUploadDto
     ) {
         const file = await this.filesService.finalizeUpload(
@@ -84,7 +84,7 @@ export class FilesController {
     // delete endpoint
     @Delete(':id')
     @UseGuards(JwtAuthGuard)
-    async delete(@GetUserId() userId: number, @Param('id') fileId: string) {
+    async delete(@GetUserId() userId: string, @Param('id') fileId: string) {
         await this.filesService.deleteFile(userId, fileId);
         return { message: 'File deleted successfully' };
     }

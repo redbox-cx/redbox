@@ -39,7 +39,7 @@ export class UsersService{
     }
 
 
-    async getProfile(userId: number) {
+    async getProfile(userId: string) {
         return this.prismaService.user.findUnique({
             where: { id: userId },
             select: {
@@ -51,7 +51,7 @@ export class UsersService{
         });
     }
 
-    async updateAvatar(userId: number, avatar: UserAvatar) {
+    async updateAvatar(userId: string, avatar: UserAvatar) {
         return this.prismaService.user.update({
             where: { id: userId },
             data: { avatar },
@@ -59,7 +59,7 @@ export class UsersService{
         });
     }
 
-    async generateInviteCode(userId: number) {
+    async generateInviteCode(userId: string) {
         const user = await this.prismaService.user.findUnique({
             where: { id: userId }
         });
@@ -94,7 +94,7 @@ export class UsersService{
         });
     }
 
-    async getMyInvites(userId: number) {
+    async getMyInvites(userId: string) {
         return this.prismaService.inviteCode.findMany({
             where: { 
                 userId: userId

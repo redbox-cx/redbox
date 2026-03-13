@@ -2,7 +2,7 @@ import { $Enums, Prisma, UserAvatar, UserRole, UserStatus } from "@prisma/client
 
 
 export class User {
-    id?: number;
+    id?: string;
     username: string;
     password: string;
     avatar: UserAvatar;

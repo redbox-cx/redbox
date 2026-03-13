@@ -37,7 +37,7 @@ enum UserAvatar {
 }
 
 model User {
-  id          Int        @id @default(autoincrement())
+  id          String     @id @default(uuid())
   username    String     @unique @db.VarChar(50)
   password    String     @db.VarChar(100)
   avatar      UserAvatar @default(DEFAULT_AVATAR)
@@ -57,11 +57,11 @@ model User {
 }
 
 model InviteCode {
-  id      Int    @id @default(autoincrement())
-  code    String @unique @db.VarChar(50)
-  usage   Int    @default(1)
-  userId  Int?
-  creator User?  @relation("GeneratedBy", fields: [userId], references: [id])
+  id      String  @id @default(uuid())
+  code    String  @unique @db.VarChar(50)
+  usage   Int     @default(1)
+  userId  String?
+  creator User?   @relation("GeneratedBy", fields: [userId], references: [id])
 }
 
 model File {
@@ -70,7 +70,7 @@ model File {
   storageName  String @unique // uuid
   size         Int // size in bytes for check
   mimetype     String // mimetype (e.g. image/jpeg, application/pdf etc...)
-  userId       Int
+  userId       String
   user         User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
@@ -84,10 +84,10 @@ model File {
 }
 
 model Link {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(uuid())
   originalUrl String   @db.Text
   shortCode   String   @unique @db.VarChar(10)
-  userId      Int
+  userId      String
   user        User     @relation(fields: [userId], references: [id])
   createdAt   DateTime @default(now())
 }

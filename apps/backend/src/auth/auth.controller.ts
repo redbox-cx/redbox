@@ -38,7 +38,7 @@ export class AuthController{
     @Post('/refresh')
     @UseGuards(AuthGuard('jwt-refresh'))
     async refresh(
-        @GetUserId() userId: number,
+        @GetUserId() userId: string,
         @GetUser('sessionKey') sessionKey: string
     ) {
         const result = await this.authService.refreshToken(userId, sessionKey);
@@ -50,7 +50,7 @@ export class AuthController{
 
     @Post('/logout')
     @UseGuards(JwtAuthGuard)
-    async logout(@GetUserId() userId: number) {
+    async logout(@GetUserId() userId: string) {
         const result = await this.authService.logout(userId);
         return {
             message: 'Logged out successfully',
@@ -62,7 +62,7 @@ export class AuthController{
     @Post('/password')
     @UseGuards(JwtAuthGuard)
     async changePassword(
-        @GetUserId() userId: number, 
+        @GetUserId() userId: string, 
         @Body() dto: ChangePasswordDto
     ) {
         return this.authService.changePassword(userId, dto);

@@ -57,7 +57,7 @@ export class AuthService {
     }
 
 
-    async getTokens(userId: number, username: string, sessionKey: string) {
+    async getTokens(userId: string, username: string, sessionKey: string) {
 
         const payload = { sub: userId, username, sessionKey };
 
@@ -156,7 +156,7 @@ export class AuthService {
     }
 
 
-    async refreshToken(userId: number, keyFromToken: string) {
+    async refreshToken(userId: string, keyFromToken: string) {
         const user = await this.prismaService.user.findUnique({
             where: { id: userId },
         });
@@ -172,7 +172,7 @@ export class AuthService {
     }
 
 
-    async logout(userId: number) {
+    async logout(userId: string) {
         await this.prismaService.user.update({
             where: {
                 id: userId,
@@ -183,7 +183,7 @@ export class AuthService {
         return { message: 'Logged out successfully' };
     }
 
-    async changePassword(userId: number, dto: ChangePasswordDto) {
+    async changePassword(userId: string, dto: ChangePasswordDto) {
         const user = await this.prismaService.user.findUnique({
             where: { id: userId }
         });

@@ -26,13 +26,13 @@ export class FilesService {
         if (!fs.existsSync(this.tempFolder)) fs.mkdirSync(this.tempFolder, { recursive: true });
     }
 
-    async initializeUpload(userId: number, fileSize: number, totalChunks: number, password?: string) {
+    async initializeUpload(userId: string, fileSize: number, totalChunks: number, password?: string) {
         // Quota Check
         const aggregation = await this.prisma.file.aggregate({
             where: { userId },
             _sum: { size: true },
         });
-        const currentUsage = aggregation._sum.size || 0;
+        const currentUsage = aggregation._sum?.size || 0;
 
         if (fileSize > this.MAX_QUOTA) throw new BadRequestException('File too large');
         if (currentUsage + fileSize > this.MAX_QUOTA) throw new BadRequestException('Quota exceeded');
@@ -55,7 +55,7 @@ export class FilesService {
         return { uploadId };
     }
 
-    async handleChunk(userId: number, uploadId: string, file: Express.Multer.File, chunkIndex: number) {
+    async handleChunk(userId: string, uploadId: string, file: Express.Multer.File, chunkIndex: number) {
         if (!file || !file.path) throw new BadRequestException('File data is missing');
 
         const metaKey = `upload:meta:${userId}:${uploadId}`;
@@ -85,7 +85,7 @@ export class FilesService {
         return { message: `Chunk ${chunkIndex} accepted` };
     }
 
-    async finalizeUpload(userId: number, uploadId: string, fileName: string, totalChunks: number, mimetype: string, fileKeyFromFrontend: string) {
+    async finalizeUpload(userId: string, uploadId: string, fileName: string, totalChunks: number, mimetype: string, fileKeyFromFrontend: string) {
 
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
         if (!masterKeyHex) throw new UnauthorizedException('Session expired');
@@ -181,7 +181,7 @@ export class FilesService {
     }
 
     // helpfunction for quota in frontend + decryption-key
-    async getUserFilesWithQuota(userId: number) {
+    async getUserFilesWithQuota(userId: string) {
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
         if (!masterKeyHex) throw new UnauthorizedException('Session expired');
         const masterKey = Buffer.from(masterKeyHex, 'hex');
@@ -236,7 +236,7 @@ export class FilesService {
         }
     }
 
-    async deleteFile(userId: number, fileId: string) {
+    async deleteFile(userId: string, fileId: string) {
         const file = await this.prisma.file.findUnique({ where: { id: fileId } });
         if (!file) throw new NotFoundException('File not found');
         if (file.userId !== userId) throw new ForbiddenException('Not your file');
