@@ -19,13 +19,11 @@ export class TransformInterceptor<T> implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     return next.handle().pipe(
       map((data) => {
-        if (data instanceof StreamableFile) {
-          return data;
-        }
+        if (data instanceof StreamableFile) return data;
         return {
           status: 'Ok',
-          message: data?.message || 'Request successful',
-          result: data?.result !== undefined ? data.result : (data?.message ? { ...data, message: undefined } : data),
+          message: data?.message ?? 'Request successful',
+          result: data?.result ?? null,
         };
       }),
     );

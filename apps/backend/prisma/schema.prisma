@@ -66,7 +66,7 @@ model InviteCode {
 
 model File {
   id           String @id @default(uuid())
-  originalName String
+  originalName String @db.VarChar(100)
   storageName  String @unique // uuid
   size         Int // size in bytes for check
   mimetype     String // mimetype (e.g. image/jpeg, application/pdf etc...)

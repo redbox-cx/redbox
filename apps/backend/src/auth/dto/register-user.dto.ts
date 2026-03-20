@@ -26,5 +26,6 @@ export class RegisterUsersDto {
 
     @IsString()
     @Length(0,50)
+    @IsNotEmpty()
     inviteCode: string;
 }

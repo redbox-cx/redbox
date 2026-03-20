@@ -17,7 +17,7 @@ export class MatchConstraint implements ValidatorConstraintInterface {
 
     defaultMessage(args: ValidationArguments) {
         const [relatedPropertyName] = args.constraints;
-        return '${args.property} does not match ${relatedPropertyName}';
+        return `${args.property} does not match ${relatedPropertyName}`;
     }
 }
 

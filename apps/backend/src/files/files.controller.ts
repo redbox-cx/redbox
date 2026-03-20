@@ -11,7 +11,6 @@ import { FilesService, storageConfig } from './files.service';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import type { Response } from 'express';
-import { pipeline } from 'stream/promises';
 import { InitUploadDto } from './dto/init-upload.dto';
 import { UploadChunkDto } from './dto/upload-chunk.dto';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
@@ -70,7 +69,6 @@ export class FilesController {
             userId, 
             dto.uploadId, 
             dto.fileName, 
-            dto.totalChunks, 
             dto.mimetype,
             dto.fileKey
         );
@@ -99,11 +97,11 @@ export class FilesController {
     ) {
         if (!token) throw new BadRequestException('Share token is required');
         const fileData = await this.filesService.downloadFile(id, token, password);
-
+        const safeName = fileData.fileName.replace(/[^\w.\-]/g, '_');
         // headers
         res.set({
             'Content-Type': fileData.mimeType,
-            'Content-Disposition': `attachment; filename="${fileData.fileName}"`,
+            'Content-Disposition': `attachment; filename="${safeName}"`,
         });
 
         return new StreamableFile(fileData.stream);

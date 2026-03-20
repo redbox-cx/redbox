@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Length, Min } from 'class-validator';
 
 export class CompleteUploadDto {
     @IsString()
@@ -8,6 +8,9 @@ export class CompleteUploadDto {
 
     @IsString()
     @IsNotEmpty()
+    @Length(1,100, {
+                message: 'Filename must not have more than 100 characters'
+            })
     fileName: string;
 
     @IsInt()
@@ -20,5 +23,6 @@ export class CompleteUploadDto {
 
     @IsString()
     @IsNotEmpty()
+    @Length(64,64)
     fileKey: string; 
 }

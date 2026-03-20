@@ -22,7 +22,7 @@ export class RolesGuard implements CanActivate {
         if (!user) return false;
 
         const dbUser = await this.prisma.user.findUnique({
-            where: { id: user.sub},
+            where: { id: user.id},
             select: { role: true }
         });
 

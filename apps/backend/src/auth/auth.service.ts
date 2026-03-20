@@ -208,6 +208,6 @@ export class AuthService {
             },
         });
 
-        return { message: 'Password changed sucessfully. Please log in again.'};
+        return { message: 'Password successfully changed. Please log in again.'};
     }
 }

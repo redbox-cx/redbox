@@ -85,7 +85,7 @@ export class FilesService {
         return { message: `Chunk ${chunkIndex} accepted` };
     }
 
-    async finalizeUpload(userId: string, uploadId: string, fileName: string, totalChunks: number, mimetype: string, fileKeyFromFrontend: string) {
+    async finalizeUpload(userId: string, uploadId: string, fileName: string, mimetype: string, fileKeyFromFrontend: string) {
 
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
         if (!masterKeyHex) throw new UnauthorizedException('Session expired');
@@ -108,7 +108,10 @@ export class FilesService {
         const writeStream = fs.createWriteStream(finalPath);
 
         try {
-            for (let i = 0; i < totalChunks; i++) {
+            const meta = JSON.parse(metaStr);
+            const trustedTotalChunks = meta.totalChunks;
+
+            for (let i = 0; i < trustedTotalChunks; i++) {
                 const chunkPath = join(userTempDir, i.toString());
                 if (!fs.existsSync(chunkPath)) throw new Error(`Chunk ${i} fehlt`);
 
@@ -141,7 +144,9 @@ export class FilesService {
             await this.redis.del(`upload:meta:${userId}:${uploadId}`);
             return fileRecord;
         } catch (error) {
-            if (writeStream) writeStream.destroy();
+            writeStream?.destroy();
+            if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+            this.logger.error('Finalize failed', error);
             throw new InternalServerErrorException('Finalize failed');
         }
     }
@@ -225,6 +230,8 @@ export class FilesService {
             await this.deleteFileInternal(file.id);
             this.logger.log(`Auto-deleted expired file: ${file.originalName}`);
         }
+
+        await this.cleanupStaleTempDirs();
     }
 
     private async deleteFileInternal(fileId: string) {
@@ -248,6 +255,30 @@ export class FilesService {
     private cleanupPhysicalFile(path: string) {
         if (fs.existsSync(path)) fs.unlinkSync(path);
     }
+
+    private async cleanupStaleTempDirs() {
+    const userTempBase = join(this.tempFolder);
+    if (!fs.existsSync(userTempBase)) return;
+
+    const userDirs = fs.readdirSync(userTempBase);
+
+    for (const userDir of userDirs) {
+        const uploadDirs = fs.readdirSync(join(userTempBase, userDir));
+
+        for (const uploadId of uploadDirs) {
+            // does redis key exist?
+            const userId = userDir.replace('user_', '');
+            const metaKey = `upload:meta:${userId}:${uploadId}`;
+            const exists = await this.redis.exists(metaKey);
+
+            if (!exists) {
+                const dirPath = join(userTempBase, userDir, uploadId);
+                fs.rmSync(dirPath, { recursive: true });
+                this.logger.log(`Cleaned up stale upload: ${uploadId}`);
+            }
+        }
+    }
+}
 }
 
 // Multer Storage Config

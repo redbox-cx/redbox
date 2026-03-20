@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, UseGuards, Req, Param, Res, Delete } from 
 import { LinksService } from './links.service';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
 import { CreateLinkDto } from './dto/create-link.dto';
-import express from 'express';
+import type { Response } from 'express';
 
 @Controller('/links')
 export class LinksController {
@@ -29,7 +29,7 @@ export class LinksController {
   // forwarding (public)
   // this route must be at the bottom
   @Get('redirect/:code')
-  async redirect(@Param('code') code: string, @Res() res: express.Response) {
+  async redirect(@Param('code') code: string, @Res() res: Response) {
     const url = await this.linksService.getOriginalUrl(code);
     return res.redirect(url);
   }
