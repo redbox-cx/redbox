@@ -27,33 +27,33 @@ export class FilesService {
     }
 
     async initializeUpload(userId: string, fileSize: number, totalChunks: number, password?: string) {
-        // Quota Check
-        const aggregation = await this.prisma.file.aggregate({
-            where: { userId },
-            _sum: { size: true },
-        });
-        const currentUsage = aggregation._sum?.size || 0;
-
         if (fileSize > this.MAX_QUOTA) throw new BadRequestException('File too large');
-        if (currentUsage + fileSize > this.MAX_QUOTA) throw new BadRequestException('Quota exceeded');
+
+        await this.prisma.$transaction(async (tx) => {
+            const aggregation = await tx.file.aggregate({
+                where: { userId },
+                _sum: { size: true },
+            });
+
+            const currentUsage = Number(aggregation._sum?.size ?? 0);
+
+            if (currentUsage + fileSize > this.MAX_QUOTA) {
+                throw new BadRequestException('Quota exceeded');
+            }
+        });
 
         const uploadId = uuidv4();
-        
-        // hash pw if one was set
-        const passwordHash = password 
-        ? await bcrypt.hash(password, 12) 
-        : null;
+        const passwordHash = password ? await bcrypt.hash(password, 12) : null;
 
-        const uploadMetadata = {
-            totalChunks,
-            nextExpectedChunk: 0,
-            fileSize,
-            passwordHash
-        };
+        await this.redis.set(
+            `upload:meta:${userId}:${uploadId}`,
+            JSON.stringify({ totalChunks, nextExpectedChunk: 0, fileSize, passwordHash }),
+            'EX', 86400
+        );
 
-        await this.redis.set(`upload:meta:${userId}:${uploadId}`, JSON.stringify(uploadMetadata), 'EX', 86400);
         return { uploadId };
     }
+
 
     async handleChunk(userId: string, uploadId: string, file: Express.Multer.File, chunkIndex: number) {
         if (!file || !file.path) throw new BadRequestException('File data is missing');
@@ -85,7 +85,7 @@ export class FilesService {
         return { message: `Chunk ${chunkIndex} accepted` };
     }
 
-    async finalizeUpload(userId: string, uploadId: string, fileName: string, mimetype: string, fileKeyFromFrontend: string) {
+    async finalizeUpload(userId, uploadId, fileName, mimetype, fileKeyFromFrontend) {
 
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
         if (!masterKeyHex) throw new UnauthorizedException('Session expired');
@@ -108,7 +108,6 @@ export class FilesService {
         const writeStream = fs.createWriteStream(finalPath);
 
         try {
-            const meta = JSON.parse(metaStr);
             const trustedTotalChunks = meta.totalChunks;
 
             for (let i = 0; i < trustedTotalChunks; i++) {
@@ -130,7 +129,7 @@ export class FilesService {
             const fileRecord = await this.prisma.file.create({
                 data: {
                     originalName: fileName,
-                    storageName: finalStorageName,
+                    storageName: finalStorageName,  
                     size: fs.statSync(finalPath).size,
                     mimetype,
                     userId,
@@ -145,8 +144,10 @@ export class FilesService {
             return fileRecord;
         } catch (error) {
             writeStream?.destroy();
-            if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
-            this.logger.error('Finalize failed', error);
+            if (fs.existsSync(finalPath)) {
+                fs.unlinkSync(finalPath);
+            }
+            this.logger.error(`Finalize failed for uploadId ${uploadId}:`, error);
             throw new InternalServerErrorException('Finalize failed');
         }
     }

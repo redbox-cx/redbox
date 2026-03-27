@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Length, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Length, Matches, Min } from 'class-validator';
 
 export class CompleteUploadDto {
     @IsString()
@@ -23,6 +23,6 @@ export class CompleteUploadDto {
 
     @IsString()
     @IsNotEmpty()
-    @Length(64,64)
-    fileKey: string; 
+    @Matches(/^[0-9a-fA-F]{64}$/, { message: 'fileKey must be a 64-character hex string' })
+    fileKey: string;
 }
