@@ -17,7 +17,8 @@ export class LinksController {
   @UseGuards(JwtAuthGuard)
   @Get()
   async getAll(@Req() req) {
-    return this.linksService.findAllByUser(req.user.id);
+    const links = await this.linksService.findAllByUser(req.user.id);
+    return { message: 'Links fetched successfully', result: links };
   }
 
   @UseGuards(JwtAuthGuard)

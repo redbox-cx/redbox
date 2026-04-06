@@ -206,6 +206,7 @@ export class AuthService {
             where: { id: userId },
             data: { sessionKey: randomUUID()}
         });
+        await this.redis.expire(`masterkey:${userId}`, 86400);
 
         return this.getTokens(updatedUser.id, updatedUser.username, updatedUser.sessionKey);
     }
@@ -213,11 +214,10 @@ export class AuthService {
 
     async logout(userId: string) {
         await this.prismaService.user.update({
-            where: {
-                id: userId,
-            },
-            data: { sessionKey: randomUUID()}
+            where: { id: userId },
+            data: { sessionKey: randomUUID() }
         });
+        await this.redis.del(`masterkey:${userId}`);
 
         return { message: 'Logged out successfully' };
     }
@@ -246,6 +246,7 @@ export class AuthService {
                 masterKeySalt: newMkStore.salt
             },
         });
+        await this.redis.del(`masterkey:${userId}`);
 
         return { message: 'Password successfully changed. Please log in again.'};
     }

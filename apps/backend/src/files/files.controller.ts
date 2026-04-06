@@ -24,7 +24,8 @@ export class FilesController {
     @Get()
     @UseGuards(JwtAuthGuard)
     async listMyFiles(@GetUserId() userId: string) {
-        return this.filesService.getUserFilesWithQuota(userId);
+        const result = await this.filesService.getUserFilesWithQuota(userId);
+        return { message: 'Files fetched successfully', result };
     }
 
 
@@ -97,11 +98,12 @@ export class FilesController {
     ) {
         if (!token) throw new BadRequestException('Share token is required');
         const fileData = await this.filesService.downloadFile(id, token, password);
+        // ASCII-safe fallback + RFC 5987 encoded name so browsers preserve the real filename
         const safeName = fileData.fileName.replace(/[^\w.\-]/g, '_');
-        // headers
+        const encodedName = encodeURIComponent(fileData.fileName);
         res.set({
             'Content-Type': fileData.mimeType,
-            'Content-Disposition': `attachment; filename="${safeName}"`,
+            'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`,
         });
 
         return new StreamableFile(fileData.stream);

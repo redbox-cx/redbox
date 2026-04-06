@@ -218,7 +218,7 @@ export class FilesService {
                 mimetype: file.mimetype,
                 createdAt: file.createdAt,
                 expiresAt: file.expiresAt,
-                shareLink: `/${file.id}?token=${file.shareToken}#${decryptedKey}`
+                shareLink: `/d/${file.id}?token=${file.shareToken}#${decryptedKey}`
             };
         });
 
