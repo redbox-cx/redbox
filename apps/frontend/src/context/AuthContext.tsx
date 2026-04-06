@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             try {
                 const response = await AuthService.getMe();
-                setUser(response.result); 
+                setUser(response);
             } catch (err) {
                 localStorage.removeItem('access_token');
                 localStorage.removeItem('refresh_token');
