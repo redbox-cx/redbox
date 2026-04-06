@@ -1,6 +1,5 @@
 import { PrismaService } from 'src/prisma.service';
-import { User } from "./users.model";
-import { ConflictException, Injectable, InternalServerErrorException, ForbiddenException, BadRequestException } from "@nestjs/common";
+import { ConflictException, Injectable, ForbiddenException, BadRequestException } from "@nestjs/common";
 import { UserAvatar } from "@prisma/client";
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
@@ -11,33 +10,6 @@ import { randomBytes } from 'crypto';
 export class UsersService{
 
     constructor(private prismaService: PrismaService){}
-
-    async createUser(data:User): Promise<User>{
-        const existing = await this.prismaService.user.findUnique({
-            where: {
-                username: data.username
-            }
-        })
-
-        if(existing){
-            throw new ConflictException('Username already exists')
-        }
-
-        try {
-            return await this.prismaService.user.create({
-                data: {
-                    username: data.username,
-                    password: data.password,
-                    role: data.role,
-                    status: data.status,
-                    sessionKey: data.sessionKey
-                }
-            });
-        } catch (error) {
-            throw new InternalServerErrorException('Error while creating user')
-        }
-    }
-
 
     async getProfile(userId: string) {
         return this.prismaService.user.findUnique({

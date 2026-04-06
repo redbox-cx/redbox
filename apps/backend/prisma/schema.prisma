@@ -54,6 +54,11 @@ model User {
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
   masterKeySalt      String? @db.VarChar(50)
+
+  recoveryPhraseHash         String @db.VarChar(100) // bcrypt Hash of the recovery-phrase (25 words)
+  recoveryEncryptedMasterKey String @db.Text // MasterKey, encrypted with recovery-phrase
+  recoveryMasterKeyIv        String @db.VarChar(50)
+  recoveryMasterKeySalt      String @db.VarChar(50)
 }
 
 model InviteCode {

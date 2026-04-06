@@ -8,9 +8,12 @@ import { RegisterUsersDto } from './dto/register-user.dto';
 import { UserRole, UserStatus } from '@prisma/client';
 import { randomUUID, scrypt, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { RecoverPasswordDto } from './dto/recover-password.dto';
 import { promisify } from 'util';
 import { Redis } from 'ioredis';
 import {InjectRedis} from '@nestjs-modules/ioredis';
+import * as bip39 from 'bip39';
+import { createHash } from 'crypto';
 
 
 const scryptAsync = promisify(scrypt);
@@ -27,15 +30,14 @@ export class AuthService {
     ){}
 
 
-    private async generateMasterKeyStore(password: string) {
-        const masterKey = randomBytes(32); 
+    private async generateMasterKeyStore(secret: string, rawMasterKey: Buffer) {
         const iv = randomBytes(16);
         const salt = randomBytes(16);
-        const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
+        const derivedKey = (await scryptAsync(secret, salt, 32)) as Buffer;
         const cipher = createCipheriv('aes-256-cbc', derivedKey, iv);
-        let encrypted = cipher.update(masterKey).toString('hex');
+        let encrypted = cipher.update(rawMasterKey).toString('hex');
         encrypted += cipher.final().toString('hex');
-        return { encrypted, iv: iv.toString('hex'), salt: salt.toString('hex'), rawMasterKey: masterKey };
+        return { encrypted, iv: iv.toString('hex'), salt: salt.toString('hex') };
     }
 
     private async decryptMasterKey(password: string, user: any) {
@@ -54,6 +56,28 @@ export class AuthService {
         let encrypted = cipher.update(rawMasterKey).toString('hex');
         encrypted += cipher.final().toString('hex');
         return { encrypted, iv: iv.toString('hex'), salt: salt.toString('hex') };
+    }
+
+    // --- Recovery-Phrase ---
+    generateRecoveryPhrase() {
+        // generates 24 words
+        const mnemonic = bip39.generateMnemonic(256); 
+        return {
+            phrase: mnemonic,
+            words: mnemonic.split(' ')
+        };
+    }
+
+    // --- helpfunction bcs of the 72-Byte limit of bcrypt ---
+    private async hashRecoveryPhrase(phrase: string) {
+        // first SHA-256 (64-Bit string), then bcrypt
+        const sha256 = createHash('sha256').update(phrase).digest('hex');
+        return await bcrypt.hash(sha256, 13);
+    }
+
+    private async compareRecoveryPhrase(phrase: string, hash: string) {
+        const sha256 = createHash('sha256').update(phrase).digest('hex');
+        return await bcrypt.compare(sha256, hash);
     }
 
 
@@ -108,7 +132,7 @@ export class AuthService {
 
 
     async register(createDto: RegisterUsersDto): Promise<any> {
-        const { username, password, inviteCode } = createDto;
+        const { username, password, inviteCode, recoveryPhrase  } = createDto;
 
         // invite code validation
         const invite = await this.prismaService.inviteCode.findUnique({
@@ -119,21 +143,38 @@ export class AuthService {
             throw new UnauthorizedException('Invalid or expired invite code');
         }
 
-        const mk = await this.generateMasterKeyStore(createDto.password);
+        // 1. generate raw masterkey
+        const rawMasterKey = randomBytes(32);
+
+        // 2. encrypt masterkey with pwd
+        const mkStore = await this.generateMasterKeyStore(password, rawMasterKey);
+        
+        // 3. encrypt masterkey with recoveryphrase
+        const recoveryMkStore = await this.generateMasterKeyStore(recoveryPhrase, rawMasterKey);
+
+        // 4. hash recoveryphrase
+        const hashedRecoveryPhrase = await this.hashRecoveryPhrase(recoveryPhrase);
         
         try {
-            // transaction: create user and count -1 code usage
             const result = await this.prismaService.$transaction(async (prisma) => {
                 const newUser = await prisma.user.create({
                     data: {
-                        username: createDto.username,
-                        password: await bcrypt.hash(createDto.password, 13),
+                        username,
+                        password: await bcrypt.hash(password, 13),
                         sessionKey: randomUUID(),
-                        encryptedMasterKey: mk.encrypted,
-                        masterKeyIv: mk.iv,
-                        masterKeySalt: mk.salt,
                         issuedCodes: 0,
-                }
+                        
+                        // Password-Based Master Key
+                        encryptedMasterKey: mkStore.encrypted,
+                        masterKeyIv: mkStore.iv,
+                        masterKeySalt: mkStore.salt,
+
+                        // Recovery-Based Master Key & Hash
+                        recoveryPhraseHash: hashedRecoveryPhrase,
+                        recoveryEncryptedMasterKey: recoveryMkStore.encrypted,
+                        recoveryMasterKeyIv: recoveryMkStore.iv,
+                        recoveryMasterKeySalt: recoveryMkStore.salt,
+                    }
                 });
 
                 await prisma.inviteCode.update({
@@ -144,13 +185,11 @@ export class AuthService {
                 return newUser;
             });
 
-            await this.redis.set(`masterkey:${result.id}`, mk.rawMasterKey.toString('hex'), 'EX', 86400);
+            await this.redis.set(`masterkey:${result.id}`, rawMasterKey.toString('hex'), 'EX', 86400);
             return this.getTokens(result.id, result.username, result.sessionKey);
 
         } catch (error) {
-            if (error.code === 'P2002') {
-                throw new ConflictException('Username already taken');
-            }
+            if (error.code === 'P2002') throw new ConflictException('Username already taken');
             throw new BadRequestException('Registration failed');
         }
     }
@@ -209,5 +248,40 @@ export class AuthService {
         });
 
         return { message: 'Password successfully changed. Please log in again.'};
+    }
+
+    async recoverPassword(dto: RecoverPasswordDto) {
+        const user = await this.prismaService.user.findUnique({
+            where: { username: dto.username }
+        });
+
+        if (!user) throw new UnauthorizedException('Invalid credentials');
+
+        // 1. Check Phrase
+        const isPhraseValid = await this.compareRecoveryPhrase(dto.recoveryPhrase, user.recoveryPhraseHash);
+        if (!isPhraseValid) throw new UnauthorizedException('Invalid credentials');
+
+        // 2. Master Key decryption with recoverykey
+        const derivedKey = (await scryptAsync(dto.recoveryPhrase, Buffer.from(user.recoveryMasterKeySalt, 'hex'), 32)) as Buffer;
+        const decipher = createDecipheriv('aes-256-cbc', derivedKey, Buffer.from(user.recoveryMasterKeyIv, 'hex'));
+        let rawMasterKey = decipher.update(Buffer.from(user.recoveryEncryptedMasterKey, 'hex'));
+        rawMasterKey = Buffer.concat([rawMasterKey, decipher.final()]);
+
+        // 3. Encrypt Masterkey with the new password
+        const newMkStore = await this.generateMasterKeyStore(dto.newPassword, rawMasterKey);
+
+        // 4. DB Update
+        await this.prismaService.user.update({
+            where: { id: user.id },
+            data: {
+                password: await bcrypt.hash(dto.newPassword, 13),
+                sessionKey: randomUUID(), // kick old sessions
+                encryptedMasterKey: newMkStore.encrypted,
+                masterKeyIv: newMkStore.iv,
+                masterKeySalt: newMkStore.salt
+            }
+        });
+
+        return { message: 'Password has been successfully reset.' };
     }
 }

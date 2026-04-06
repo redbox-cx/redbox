@@ -2,9 +2,10 @@ import { Controller,Post,Get,Req,Res,Body, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login-user.dto";
 import { RegisterUsersDto } from "./dto/register-user.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
+import { RecoverPasswordDto } from "./dto/recover-password.dto";
 import { AuthGuard } from "@nestjs/passport";
 import { JwtAuthGuard } from "./guard/auth.guard";
-import { ChangePasswordDto } from "./dto/change-password.dto";
 import { GetUserId, GetUser } from "./decorator/get-user.decorator";
 
 
@@ -65,5 +66,23 @@ export class AuthController{
         @Body() dto: ChangePasswordDto
     ) {
         return this.authService.changePassword(userId, dto);
+    }
+
+    @Get('/recovery-phrase/generate')
+    generatePhrase() {
+        const data = this.authService.generateRecoveryPhrase();
+        return {
+            message: 'Recovery phrase successfully generated',
+            result: data 
+        };
+    }
+
+    @Post('/recover-password')
+    async recoverPassword(@Body() dto: RecoverPasswordDto) {
+        const result = await this.authService.recoverPassword(dto);
+        return {
+            message: result.message,
+            result
+        };
     }
 }

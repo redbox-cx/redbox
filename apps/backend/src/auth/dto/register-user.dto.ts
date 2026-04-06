@@ -28,4 +28,8 @@ export class RegisterUsersDto {
     @Length(0,50)
     @IsNotEmpty()
     inviteCode: string;
+    
+    @IsString()
+    @IsNotEmpty()
+    recoveryPhrase: string;
 }
