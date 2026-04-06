@@ -73,6 +73,12 @@ export class FilesService {
             throw new BadRequestException(`Wrong chunk order. Expected index ${meta.nextExpectedChunk}`);
         }
 
+        if (Number(chunkIndex) >= meta.totalChunks) {
+            this.cleanupPhysicalFile(file.path);
+            throw new BadRequestException(`Invalid chunk index. Total chunks is ${meta.totalChunks}`);
+        }
+
+
         const userTempDir = join(this.tempFolder, `user_${userId}`, uploadId);
         if (!fs.existsSync(userTempDir)) fs.mkdirSync(userTempDir, { recursive: true });
 
