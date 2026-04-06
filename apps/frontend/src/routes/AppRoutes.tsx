@@ -8,6 +8,8 @@ import { Blog } from "../pages/Blog";
 import { Contact } from "../pages/Contact";
 import { Donate } from "../pages/Donate";
 import { DashBoard } from "../pages/Dashboard";
+import { Upload } from "../pages/Upload";
+import { Download } from "../pages/Download";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -30,8 +32,10 @@ export function AppRoutes() {
                 path="/register" 
                 element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} 
             />
+            <Route path="/d/:fileId" element={<Download />} />
             <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<DashBoard />} />
+                <Route path="/upload" element={<Upload />} />
             </Route>
         </Routes>
     );

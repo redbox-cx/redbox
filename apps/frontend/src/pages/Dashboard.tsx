@@ -9,9 +9,9 @@ export function DashBoard() {
     const { user } = useAuth();
 
     useEffect(() => {
-        document.body.style.overflow = 'hidden';
+        document.documentElement.classList.add('dash-page');
         return () => {
-            document.body.style.overflow = 'auto';
+            document.documentElement.classList.remove('dash-page');
         };
     }, []);
 

@@ -1,45 +1,62 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { LinkService, type Link } from "../../services/LinkService";
+
+const LINK_LIMIT = 25;
 
 export function LinksWidget() {
-    const [revealedIds, setRevealedIds] = useState<number[]>([]);
+    const [links, setLinks] = useState<Link[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [revealedIds, setRevealedIds] = useState<string[]>([]);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
 
-    const links = [
-        { id: 1, url: "https://example.com/asdfghjklqwertzuiopyxcvbnm", short: "redbox.cx/s/9RqkW" },
-        { id: 2, url: "https://example.com/asdfghjklqwertzuio", short: "redbox.cx/s/GrsT1" },
-        { id: 3, url: "https://example.com/asdfghjkl", short: "redbox.cx/s/X1lpR" },
-        { id: 4, url: "https://example.com/asdfgh", short: "redbox.cx/s/pa92d" }
-    ];
+    useEffect(() => {
+        LinkService.getAll()
+            .then(setLinks)
+            .finally(() => setLoading(false));
+    }, []);
 
-    const toggleReveal = (id: number) => {
-        setRevealedIds(prev => 
+    const toggleReveal = (id: string) => {
+        setRevealedIds(prev =>
             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
         );
     };
 
-    const [copiedId, setCopiedId] = useState<number | null>(null);
-
-    const copyText = (e: React.MouseEvent, id: number, text: string) => {
+    const copyText = (e: React.MouseEvent, id: string, text: string) => {
         e.stopPropagation();
         navigator.clipboard.writeText(text);
         setCopiedId(id);
-        setTimeout(() => setCopiedId(null), 1500); // 1.5s
+        setTimeout(() => setCopiedId(null), 1500);
     };
 
     const truncate = (text: string, maxLength: number) => {
-    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+        return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
     };
+
+    const getShortUrl = (shortCode: string) =>
+        `${import.meta.env.VITE_API_URL}/links/redirect/${shortCode}`;
 
     return (
         <div className="widget-wrapper">
             <div className="widget-tab"><i className="bi bi-link-45deg"></i> Your Links</div>
             <div className="glass-panel widget-box">
                 <div className="widget-header">
-                    <span className="count-badge-top">{links.length}/25</span>
+                    <span className="count-badge-top">{links.length}/{LINK_LIMIT}</span>
                 </div>
                 <div className="links-scroll-area">
                     <div className="links-stack">
-                        {links.map(link => {
+                        {loading ? (
+                            <div className="empty-bins">
+                                <i className="bi bi-hourglass-split"></i>
+                                <span>Loading...</span>
+                            </div>
+                        ) : links.length === 0 ? (
+                            <div className="empty-bins">
+                                <i className="bi bi-link-45deg"></i>
+                                <span>0/{LINK_LIMIT} Links available</span>
+                            </div>
+                        ) : links.map(link => {
                             const isRevealed = revealedIds.includes(link.id);
+                            const shortUrl = getShortUrl(link.shortCode);
                             return (
                                 <div key={link.id} className={`link-item ${isRevealed ? 'revealed' : ''}`}>
                                     {!isRevealed && (
@@ -48,13 +65,13 @@ export function LinksWidget() {
                                         </div>
                                     )}
                                     <div className="link-content">
-                                        <span className="link-orig">{truncate(link.url, 35)}</span>
-                                        <span className="link-res">{link.short}</span>
+                                        <span className="link-orig">{truncate(link.originalUrl, 35)}</span>
+                                        <span className="link-res">{shortUrl}</span>
                                     </div>
                                     <div className="link-actions">
-                                        <button 
-                                            className={`copy-icon-btn ${copiedId === link.id ? 'copied' : ''}`} 
-                                            onClick={(e) => copyText(e, link.id, link.short)}>
+                                        <button
+                                            className={`copy-icon-btn ${copiedId === link.id ? 'copied' : ''}`}
+                                            onClick={(e) => copyText(e, link.id, shortUrl)}>
                                             <i className={`bi bi-${copiedId === link.id ? 'check-lg' : 'copy'}`}></i>
                                         </button>
                                         <button className="reblur-btn" onClick={() => toggleReveal(link.id)} title="Blur">
