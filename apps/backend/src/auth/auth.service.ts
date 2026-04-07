@@ -205,7 +205,11 @@ export class AuthService {
             return this.getTokens(result.id, result.username, result.sessionKey);
 
         } catch (error) {
-            if (error.code === 'P2002') throw new ConflictException('Username already taken');
+            if (error instanceof Error && 'code' in error) {
+                if ((error as any).code === 'P2002') {
+                    throw new ConflictException('Username already taken');
+                }
+            }
             throw new BadRequestException('Registration failed');
         }
     }
