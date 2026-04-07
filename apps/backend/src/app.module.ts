@@ -7,6 +7,7 @@ import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { LinksModule } from './links/links.module';
+import { BinsModule } from './bins/bins.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { LinksModule } from './links/links.module';
     AuthModule,
     FilesModule,
     LinksModule,
+    BinsModule,
   ],
   controllers: [],
   providers: [],

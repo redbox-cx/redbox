@@ -50,6 +50,7 @@ model User {
   generatedCodes InviteCode[] @relation("GeneratedBy")
   files          File[]
   links          Link[]
+  bins           Bin[]
 
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
@@ -95,4 +96,23 @@ model Link {
   userId      String
   user        User     @relation(fields: [userId], references: [id])
   createdAt   DateTime @default(now())
+}
+
+model Bin {
+  id      String  @id @default(uuid())
+  title   String? @db.VarChar(100)
+  content String  @db.MediumText // text
+  size    Int // original-size in bytes
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime?
+  shareToken   String    @unique @default(uuid())
+  passwordHash String?   @db.VarChar(100)
+
+  // e2ee
+  encryptedBinKey String @db.Text
+  binKeyIv        String @db.VarChar(50)
 }
