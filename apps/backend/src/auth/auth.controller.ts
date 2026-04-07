@@ -2,6 +2,7 @@ import { Controller,Post,Get,Req,Res,Body, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login-user.dto";
 import { RegisterUsersDto } from "./dto/register-user.dto";
+import { PreValidateDto } from "./dto/pre-validate.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { RecoverPasswordDto } from "./dto/recover-password.dto";
 import { AuthGuard } from "@nestjs/passport";
@@ -23,6 +24,12 @@ export class AuthController{
             message: 'Successfully logged in',
             result
         };
+    }
+
+    @Post('/pre-validate')
+    async preValidate(@Body() dto: PreValidateDto) {
+        await this.authService.preValidate(dto.username, dto.inviteCode);
+        return { message: 'Credentials valid' };
     }
 
     @Post('/register')

@@ -58,6 +58,22 @@ export class AuthService {
         return { encrypted, iv: iv.toString('hex'), salt: salt.toString('hex') };
     }
 
+    async preValidate(username: string, inviteCode: string) {
+        const invite = await this.prismaService.inviteCode.findUnique({
+            where: { code: inviteCode }
+        });
+        if (!invite || invite.usage <= 0) {
+            throw new UnauthorizedException('Invalid or expired invite code');
+        }
+
+        const existing = await this.prismaService.user.findUnique({
+            where: { username }
+        });
+        if (existing) {
+            throw new ConflictException('Username already taken');
+        }
+    }
+
     // --- Recovery-Phrase ---
     generateRecoveryPhrase() {
         // generates 24 words
@@ -196,19 +212,22 @@ export class AuthService {
 
 
     async refreshToken(userId: string, keyFromToken: string) {
-        const user = await this.prismaService.user.findUnique({
-            where: { id: userId },
+        const newSessionKey = randomUUID();
+        const result = await this.prismaService.user.updateMany({
+            where: { id: userId, sessionKey: keyFromToken },
+            data: { sessionKey: newSessionKey }
         });
 
-        if (!user || user.sessionKey !== keyFromToken) {throw new ForbiddenException('Access Denied (Session invalid)');}
+        if (result.count === 0) {
+            throw new ForbiddenException('Access Denied (Session invalid)');
+        }
 
-        const updatedUser = await this.prismaService.user.update({
-            where: { id: userId },
-            data: { sessionKey: randomUUID()}
+        const updatedUser = await this.prismaService.user.findUnique({
+            where: { id: userId }
         });
         await this.redis.expire(`masterkey:${userId}`, 86400);
 
-        return this.getTokens(updatedUser.id, updatedUser.username, updatedUser.sessionKey);
+        return this.getTokens(updatedUser!.id, updatedUser!.username, updatedUser!.sessionKey);
     }
 
 
