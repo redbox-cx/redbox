@@ -79,7 +79,7 @@ export function LoginForm() {
                     {isLoading ? "Authenticating..." : "Login"}
                 </button>
                 <div className="help-links">
-                    <a href="#">Trouble signing in?</a>
+                    <a href="/recover">Forgot password?</a>
                 </div>
             </div>
 

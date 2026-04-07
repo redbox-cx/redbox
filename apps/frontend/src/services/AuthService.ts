@@ -3,12 +3,12 @@ import apiClient from '../api/apiClient';
 export const AuthService = {
     async login(dto: any) {
         const { data } = await apiClient.post('/auth/login', dto);
-        return data; 
+        return data;
     },
 
     async register(dto: any) {
         const { data } = await apiClient.post('/auth/register', dto);
-        return data; 
+        return data;
     },
 
     async logout() {
@@ -18,6 +18,26 @@ export const AuthService = {
 
     async getMe() {
         const { data } = await apiClient.get('/user/profile');
-        return data.result; 
-    }
+        return data.result;
+    },
+
+    async preValidate(dto: { username: string; password: string; passwordConfirm: string; inviteCode: string }) {
+        const { data } = await apiClient.post('/auth/pre-validate', dto);
+        return data;
+    },
+
+    async generatePhrase(): Promise<{ phrase: string; words: string[] }> {
+        const { data } = await apiClient.get('/auth/recovery-phrase/generate');
+        return data.result;
+    },
+
+    async recoverPassword(dto: {
+        username: string;
+        recoveryPhrase: string;
+        newPassword: string;
+        newPasswordConfirm: string;
+    }) {
+        const { data } = await apiClient.post('/auth/recover-password', dto);
+        return data;
+    },
 };

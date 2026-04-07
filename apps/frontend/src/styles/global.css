@@ -748,7 +748,7 @@ html.menu-open body {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 80px 20px 40px;
     box-sizing: border-box;
 }
 
@@ -2960,7 +2960,7 @@ html.dash-page {
 .upload-drive-container {
     flex: 1;
     display: grid;
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: minmax(260px, 340px) 1fr;
     gap: 25px;
     padding: 10px 40px 25px;
     min-height: 0;
@@ -2975,6 +2975,8 @@ html.dash-page {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .upload-panel {
@@ -2988,6 +2990,7 @@ html.dash-page {
 .upload-files-panel {
     flex: 1;
     min-height: 0;
+    min-width: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -3048,8 +3051,10 @@ html.dash-page {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    overflow-x: hidden;
     flex: 1;
     min-height: 0;
+    min-width: 0;
     padding-right: 4px;
 }
 
@@ -3086,6 +3091,7 @@ html.dash-page {
     flex-direction: column;
     gap: 2px;
     overflow: hidden;
+    min-width: 0;
 }
 
 .drive-file-name {
@@ -3541,5 +3547,162 @@ html.dash-page {
 
 .confirm-btn-delete:hover {
     opacity: 0.85;
+}
+/*#endregion*/
+
+/*#region Recovery Phrase */
+/* Tall phrase cards: anchor to top so brand link stays clear */
+.login-page--phrase {
+    align-items: flex-start;
+    padding-top: 80px;
+    padding-bottom: 40px;
+}
+
+.login-container--wide {
+    max-width: 700px;
+}
+
+.recover-container {
+    max-width: 700px;
+}
+
+@media (max-width: 760px) {
+    .login-container--wide,
+    .recover-container {
+        max-width: 100%;
+    }
+}
+
+.phrase-warning {
+    background: #fff8f0;
+    border-left: 3px solid var(--color-primary);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.82rem;
+    color: #7c3a00;
+    margin-bottom: 0;
+    line-height: 1.5;
+}
+
+.phrase-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 4px 20px;
+    margin: 20px 0 12px;
+}
+
+.phrase-word {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.phrase-word--verify {
+    border-bottom-color: var(--color-primary);
+}
+
+.phrase-num {
+    min-width: 22px;
+    font-size: 0.78rem;
+    color: #9ca3af;
+    font-weight: 600;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.phrase-text {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: 0.2px;
+}
+
+.phrase-text--dim {
+    color: #9ca3af;
+    font-weight: 600;
+}
+
+.phrase-input {
+    flex: 1;
+    min-width: 0;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--color-text);
+    padding: 2px 0;
+}
+
+.phrase-input::placeholder {
+    color: #c4c4c4;
+    font-weight: 400;
+}
+
+.phrase-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.phrase-btn-outline {
+    flex: 1;
+    min-width: 100px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1.5px solid var(--color-primary);
+    background: white;
+    color: var(--color-primary);
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.phrase-btn-outline:hover:not(:disabled) {
+    background: #fff0f0;
+}
+
+.phrase-btn-outline:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.phrase-btn-continue {
+    flex: 2;
+    margin-top: 0;
+    padding: 12px;
+}
+
+.phrase-save-hint {
+    font-size: 0.78rem;
+    color: #9ca3af;
+    text-align: center;
+    margin: 8px 0 0;
+}
+
+.recover-phrase-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 4px;
+}
+
+@media (max-width: 600px) {
+    .phrase-actions {
+        flex-direction: column;
+    }
+
+    .phrase-btn-continue {
+        flex: unset;
+    }
+}
+
+@media (max-width: 400px) {
 }
 /*#endregion*/

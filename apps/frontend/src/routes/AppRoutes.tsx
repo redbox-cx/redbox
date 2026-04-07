@@ -10,6 +10,7 @@ import { Donate } from "../pages/Donate";
 import { DashBoard } from "../pages/Dashboard";
 import { Upload } from "../pages/Upload";
 import { Download } from "../pages/Download";
+import { Recover } from "../pages/Recover";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -33,6 +34,7 @@ export function AppRoutes() {
                 element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} 
             />
             <Route path="/d/:fileId" element={<Download />} />
+            <Route path="/recover" element={<Recover />} />
             <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<DashBoard />} />
                 <Route path="/upload" element={<Upload />} />
