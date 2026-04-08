@@ -40,7 +40,7 @@ export function LinksWidget() {
             <div className="widget-tab"><i className="bi bi-link-45deg"></i> Your Links</div>
             <div className="glass-panel widget-box">
                 <div className="widget-header">
-                    <span className="count-badge-top">{links.length}/{LINK_LIMIT}</span>
+                    <span className={`red-badge ${links.length === 0 ? 'zero' : ''}`}>{links.length}/{LINK_LIMIT}</span>
                 </div>
                 <div className="links-scroll-area">
                     <div className="links-stack">

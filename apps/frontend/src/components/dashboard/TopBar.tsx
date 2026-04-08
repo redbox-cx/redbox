@@ -30,8 +30,10 @@ export function TopBar() {
         <>
             <nav className="dash-top-nav">
                 <div className="nav-left">
-                    <Link to="/"><img src={logoRed} alt="logo" width="35" /></Link>
-                    <span className="logo-text">redbox<span className="dot">.</span></span>
+                    <Link to="/" className="nav-brand-link">
+                        <img src={logoRed} alt="logo" width="35" />
+                        <span className="logo-text">redbox<span className="dot">.</span></span>
+                    </Link>
                 </div>
 
                 <div className="nav-center">

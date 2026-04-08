@@ -26,9 +26,9 @@ export function NotificationWidget({ title, icon, count }: Props) {
                         </div>
                     </div>
                     <div className={`glass-slider ${isSlidDown ? 'slid-down' : ''}`}>
-                        <div className="slider-handle">
+                        <div className="slider-handle" onClick={() => setIsSlidDown(!isSlidDown)}>
                             <div className="handle-track"><div className="handle-dot"></div></div>
-                            <button className="slider-toggle-btn" onClick={() => setIsSlidDown(!isSlidDown)}>
+                            <button className="slider-toggle-btn" tabIndex={-1}>
                                 <i className={`bi bi-chevron-${isSlidDown ? 'up' : 'down'}`}></i>
                             </button>
                         </div>

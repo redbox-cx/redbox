@@ -26,7 +26,9 @@ html.dash-page body {
 }
 
 @media (max-height: 780px) and (min-width: 900px) {
-    html.dash-page,
+    html.dash-page {
+        overflow: hidden;
+    }
     html.dash-page body {
         overflow-y: auto;
         overflow-x: hidden;
@@ -34,7 +36,9 @@ html.dash-page body {
 }
 
 @media (max-width: 900px) {
-    html.dash-page,
+    html.dash-page {
+        overflow: hidden;
+    }
     html.dash-page body {
         overflow-y: auto;
         overflow-x: hidden;
@@ -1582,6 +1586,12 @@ html.dash-page {
 .dash-top-nav .logo-text {
     display: inline;
 }
+.nav-brand-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
  .nav-center {
      display: flex;
      gap: 25px;
@@ -1879,6 +1889,8 @@ html.dash-page {
     width: 100%;
     box-sizing: border-box;
     border-radius: 20px 20px 0 0;
+    cursor: pointer;
+    user-select: none;
 }
 
 .handle-track {
