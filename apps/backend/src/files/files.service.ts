@@ -253,7 +253,7 @@ export class FilesService {
     async deleteFile(userId: string, fileId: string) {
         const file = await this.prisma.file.findUnique({ where: { id: fileId } });
         if (!file) throw new NotFoundException('File not found');
-        if (file.userId !== userId) throw new ForbiddenException('Not your file');
+        if (file.userId !== userId) throw new NotFoundException('File not found');
 
         await this.deleteFileInternal(fileId);
         return { message: 'Deleted' };
