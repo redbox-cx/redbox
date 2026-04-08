@@ -56,14 +56,7 @@ export class BinsController {
         
         return {
             message: 'Bin fetched successfully',
-            result: {
-                title: bin.title,
-                content: bin.content,
-                createdAt: bin.createdAt,
-                expiresAt: bin.expiresAt,
-                encryptedBinKey: bin.encryptedBinKey,
-                binKeyIv: bin.binKeyIv
-            }
+            result: bin
         };
     }
 }

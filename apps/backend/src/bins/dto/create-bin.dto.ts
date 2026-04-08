@@ -25,9 +25,6 @@ export class CreateBinDto {
 
     @IsString()
     @IsNotEmpty()
-    encryptedBinKey: string;
-
-    @IsString()
-    @IsNotEmpty()
-    binKeyIv: string;
+    @Matches(/^[0-9a-fA-F]{64}$/, { message: 'binKey must be a 64-character hex string' })
+    binKey: string;
 }
