@@ -4,6 +4,7 @@ import { TopBar } from "../components/dashboard/TopBar";
 import { LinksWidget } from "../components/dashboard/LinksWidget";
 import { StorageWidget } from "../components/dashboard/StorageWidget";
 import { NotificationWidget } from "../components/dashboard/NotificationWidget";
+import { BinsWidget } from "../components/dashboard/BinsWidget";
 
 export function DashBoard() {
     const { user } = useAuth();
@@ -33,15 +34,7 @@ export function DashBoard() {
                         <div className="dash-bottom-row">
                             <LinksWidget />
                             <StorageWidget />
-                            <div className="widget-wrapper">
-                                <div className="widget-tab"><i className="bi bi-folder2"></i> Created Bins</div>
-                                <div className="glass-panel widget-box">
-                                    <div className="empty-bins">
-                                        <i className="bi bi-folder-x"></i>
-                                        <span>0 Bins available</span>
-                                    </div>
-                                </div>
-                            </div>
+                            <BinsWidget />
                         </div>
                     </div>
                 </div>
