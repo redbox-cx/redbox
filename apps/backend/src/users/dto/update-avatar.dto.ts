@@ -3,6 +3,6 @@ import { UserAvatar } from "@prisma/client";
 
 export class UpdateAvatarDto {
     @IsEnum(UserAvatar, {message: "This avatar doesn't exist"})
-    @IsNotEmpty()
+    @IsNotEmpty({message: "Avatar can't be empty"})
     avatar: UserAvatar;
 }

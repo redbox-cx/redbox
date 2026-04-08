@@ -3,12 +3,14 @@ import { Match } from "src/common/decorators/match.decorator";
 
 export class PreValidateDto {
     @IsString()
-    @Length(5, 50)
+    @Length(5, 50, {message: "Username must have between 5 - 50 characters"})
     username: string;
 
     @IsString()
-    @Length(8, 100, { message: 'Password must be at least 8 characters.' })
-    @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
+    @Length(8,100, {
+        message: 'Password must be at least 8 characters.'
+    })
+    @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/,{
         message: 'Password must include at least one uppercase letter, one lowercase letter, and at least one number or special character.'
     })
     password: string;
@@ -19,6 +21,7 @@ export class PreValidateDto {
     passwordConfirm: string;
 
     @IsString()
-    @IsNotEmpty()
+    @Length(0,50, {message: "Invitecode should not be longer than 50 characters"})
+    @IsNotEmpty({message: "Invitecode required"})
     inviteCode: string;
 }

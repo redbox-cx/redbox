@@ -3,14 +3,15 @@ import { Match } from "src/common/decorators/match.decorator";
 
 export class RecoverPasswordDto {
     @IsString()
-    @IsNotEmpty()
+    @IsNotEmpty({message: "Username is required"})
     username: string;
 
     @IsString()
-    @IsNotEmpty()
+    @IsNotEmpty({message: "Recovery-phrase is required"})
     recoveryPhrase: string; // 24 words phrase
 
     @IsString()
+    @IsNotEmpty({message: "New password is required"})
     @Length(8,100, {
         message: 'New password must be at least 8 characters.'
     })

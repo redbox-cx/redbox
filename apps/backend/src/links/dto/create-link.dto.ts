@@ -5,6 +5,6 @@ export class CreateLinkDto {
     { require_protocol: true, },
     { message: 'The URL must start with http:// or https://', },
   )
-  @IsNotEmpty()
+  @IsNotEmpty({message: "URL can't be empty"})
   url: string;
 }

@@ -2,7 +2,7 @@ import { IsString, IsNotEmpty, MaxLength, IsOptional, Matches, IsNumber } from '
 
 export class CreateBinDto {
     @IsString()
-    @IsNotEmpty()
+    @IsNotEmpty({message: "Content can't be empty"})
     @MaxLength(3000000, { message: 'Encrypted content exceeds limit' }) 
     content: string;
 
@@ -11,7 +11,7 @@ export class CreateBinDto {
 
     @IsString()
     @IsOptional()
-    @MaxLength(100)
+    @MaxLength(100, {message: "Title can't be longer than 100 characters"})
     title?: string;
 
     @IsString()

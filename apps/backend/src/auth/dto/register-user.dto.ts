@@ -6,7 +6,7 @@ import { Match } from "src/common/decorators/match.decorator";
 export class RegisterUsersDto {
     
     @IsString()
-    @Length(5,50)
+    @Length(5,50, {message: "Username must have between 5 - 50 characters"})
     username: string;
 
     @IsString()
@@ -25,8 +25,8 @@ export class RegisterUsersDto {
     passwordConfirm: string;
 
     @IsString()
-    @Length(0,50)
-    @IsNotEmpty()
+    @Length(0,50, {message: "Invitecode should not be longer than 50 characters"})
+    @IsNotEmpty({message: "Invitecode required"})
     inviteCode: string;
     
     @IsString()
