@@ -114,7 +114,7 @@ export function Shortner() {
                                 <input
                                     className="shr-input"
                                     type="url"
-                                    placeholder="https://example.com/very/long/url"
+                                    placeholder="https://example.com/"
                                     value={url}
                                     onChange={e => setUrl(e.target.value)}
                                     disabled={creating}
