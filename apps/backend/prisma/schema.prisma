@@ -31,9 +31,10 @@ enum UserRole {
 // User-Avatar enum
 enum UserAvatar {
   DEFAULT_AVATAR
-  EXAMPLE1
-  EXAMPLE2
-  EXAMPLE3
+  avatar_robot
+  avatar_mesh_r
+  avatar_mesh_y
+  avatar_mesh_p
 }
 
 model User {

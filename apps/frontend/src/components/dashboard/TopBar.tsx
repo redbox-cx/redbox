@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import logoRed from "../../assets/images/logo_red.png";
 import { useAuth } from "../../context/AuthContext";
 import { Link, useLocation } from "react-router-dom";
+import { getAvatarSrc } from "../../config/avatars";
 
 const navLinks = [
     { label: "Dashboard", to: "/dashboard" },
@@ -42,14 +43,16 @@ export function TopBar() {
                 <div className="nav-right">
                     <div className="user-dropdown-wrapper" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
                         <div className="user-avatar-dash">
-                            <i className="bi bi-cloud-fill"></i>
+                            {user?.avatar
+                                ? <img src={getAvatarSrc(user.avatar)} alt="avatar" className="topbar-avatar-img" />
+                                : <i className="bi bi-person-fill"></i>}
                         </div>
                         <span className="user-name-text">{user?.username || "username"}</span>
                         <i className={`bi bi-chevron-down dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></i>
 
                         {isDropdownOpen && (
                             <div className="profile-dropdown-menu">
-                                <Link to="/settings"><i className="bi bi-gear"></i> Settings</Link>
+                                <Link to="/user/settings"><i className="bi bi-gear"></i> Settings</Link>
                                 <button onClick={logout}><i className="bi bi-box-arrow-right"></i> Logout</button>
                             </div>
                         )}
@@ -87,12 +90,14 @@ export function TopBar() {
 
                 <div className="dash-mobile-user">
                     <div className="user-avatar-dash">
-                        <i className="bi bi-cloud-fill"></i>
+                        {user?.avatar
+                            ? <img src={getAvatarSrc(user.avatar)} alt="avatar" className="topbar-avatar-img" />
+                            : <i className="bi bi-person-fill"></i>}
                     </div>
                     <span>{user?.username || "username"}</span>
                 </div>
                 <div className="dash-mobile-actions">
-                    <Link to="/settings" onClick={closeMobileMenu}>
+                    <Link to="/user/settings" onClick={closeMobileMenu}>
                         <i className="bi bi-gear"></i> Settings
                     </Link>
                     <button onClick={() => { closeMobileMenu(); logout(); }}>

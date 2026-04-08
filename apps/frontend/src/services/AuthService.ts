@@ -31,6 +31,11 @@ export const AuthService = {
         return data.result;
     },
 
+    async changePassword(dto: { oldPassword: string; newPassword: string; newPasswordConfirm: string }) {
+        const { data } = await apiClient.post('/auth/password', dto);
+        return data;
+    },
+
     async recoverPassword(dto: {
         username: string;
         recoveryPhrase: string;

@@ -15,6 +15,7 @@ import { Shortner } from "../pages/Shortner";
 import { ShortRedirect } from "../pages/ShortRedirect";
 import { Bin } from "../pages/Bin";
 import { BinView } from "../pages/BinView";
+import { Settings } from "../pages/Settings";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -46,6 +47,7 @@ export function AppRoutes() {
                 <Route path="/upload" element={<Upload />} />
                 <Route path="/shortner" element={<Shortner />} />
                 <Route path="/bin" element={<Bin />} />
+                <Route path="/user/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
