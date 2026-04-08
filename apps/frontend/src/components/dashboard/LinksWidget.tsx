@@ -33,7 +33,7 @@ export function LinksWidget() {
     };
 
     const getShortUrl = (shortCode: string) =>
-        `${import.meta.env.VITE_API_URL}/links/redirect/${shortCode}`;
+        `${window.location.origin}/s/${shortCode}`;
 
     return (
         <div className="widget-wrapper">

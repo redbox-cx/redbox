@@ -64,7 +64,7 @@ function Menu({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (val: boolean
                     ))}
                 </ul>
             </div>
-            <button className="mobile-login-btn">Login</button>
+            <a href="/login" className="mobile-login-btn">Login</a>
         </div>
     );
 }

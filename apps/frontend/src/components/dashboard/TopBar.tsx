@@ -8,8 +8,8 @@ const navLinks = [
     { label: "SecureSphere", to: "/dashboard/securesphere" },
     { label: "Mail", to: "/dashboard/mail" },
     { label: "Upload", to: "/upload" },
-    { label: "Shortner", to: "/dashboard/shortner" },
-    { label: "Bin", to: "/dashboard/bin" },
+    { label: "Shortner", to: "/shortner" },
+    { label: "Bin", to: "/bin" },
 ];
 
 export function TopBar() {

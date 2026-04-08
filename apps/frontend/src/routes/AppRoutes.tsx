@@ -11,6 +11,10 @@ import { DashBoard } from "../pages/Dashboard";
 import { Upload } from "../pages/Upload";
 import { Download } from "../pages/Download";
 import { Recover } from "../pages/Recover";
+import { Shortner } from "../pages/Shortner";
+import { ShortRedirect } from "../pages/ShortRedirect";
+import { Bin } from "../pages/Bin";
+import { BinView } from "../pages/BinView";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -35,10 +39,15 @@ export function AppRoutes() {
             />
             <Route path="/d/:fileId" element={<Download />} />
             <Route path="/recover" element={<Recover />} />
+            <Route path="/s/:code" element={<ShortRedirect />} />
+            <Route path="/b/:id" element={<BinView />} />
             <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<DashBoard />} />
                 <Route path="/upload" element={<Upload />} />
+                <Route path="/shortner" element={<Shortner />} />
+                <Route path="/bin" element={<Bin />} />
             </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     );
 }
