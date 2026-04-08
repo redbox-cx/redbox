@@ -24,12 +24,17 @@ export class BinsService {
         @InjectRedis() private readonly redis: Redis
     ) {}
 
+    private get binLimit(): number {
+        return Number(process.env.BIN_LIMIT ?? 100);
+    }
+
 
     private calculateExpiration(expiresIn?: string): Date | null {
         if (!expiresIn || expiresIn === '30d') return addDays(new Date(), 30);
         if (expiresIn === 'never') return null;
 
         const amount = parseInt(expiresIn.slice(0, -1));
+        if (isNaN(amount)) return addDays(new Date(), 30);
         const unit = expiresIn.slice(-1);
 
         if (unit === 'd') return addDays(new Date(), amount);
@@ -44,6 +49,14 @@ export class BinsService {
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
         if (!masterKeyHex) throw new UnauthorizedException('Session expired');
         const masterKey = Buffer.from(masterKeyHex, 'hex');
+
+        const currentBinCount = await this.prisma.bin.count({
+            where: { userId: userId },
+        });
+
+        if (currentBinCount >= this.binLimit) {
+            throw new BadRequestException(`You have reached your limit of ${this.binLimit} bins.`);
+        }
 
         // encrypt binkey sent by frontend
         const binKeyIv = randomBytes(16);
