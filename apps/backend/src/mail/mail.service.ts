@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { simpleParser } from 'mailparser';
 import { IncomingMailDto } from './dto/incoming-mail.dto';
@@ -10,25 +10,61 @@ export class MailService {
   constructor(private prisma: PrismaService) {}
 
 
-  async getUserMails(userId: string) {
-    const mails = await this.prisma.mail.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        subject: true,
-        from: true,
-        to: true,
-        content: true,
-        isRead: true,
-        createdAt: true
-      }
-    });
+  async getUserMails(userId: string, limit: number = 50, offset: number = 0) {
+    try {
+      const mails = await this.prisma.mail.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          subject: true,
+          from: true,
+          to: true,
+          isRead: true,
+          createdAt: true
+          // no content to keep it small
+        }
+      });
 
-    return mails;
+      const totalCount = await this.prisma.mail.count({ where: { userId } });
+
+      return { mails, totalCount };
+    } catch (error) {
+      this.logger.error(`Error fetching mails for user ${userId}:`, error);
+      throw new InternalServerErrorException('Could not fetch emails');
+    }
   }
 
-  
+
+  async getSingleMail(userId: string, mailId: string) {
+    try {
+      const mail = await this.prisma.mail.findUnique({
+        where: { id: mailId }
+      });
+
+      if (!mail || mail.userId !== userId) {
+        throw new NotFoundException('Mail not found');
+      }
+
+      if (!mail.isRead) {
+        await this.prisma.mail.update({
+          where: { id: mailId },
+          data: { isRead: true }
+        });
+      }
+
+      return mail;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      
+      this.logger.error(`Error fetching single mail ${mailId}:`, error);
+      throw new InternalServerErrorException('Could not fetch email content');
+    }
+  }
+
+
   async processIncomingMail(dto: IncomingMailDto) {
     try {
       const emailParts = dto.to.split('@');

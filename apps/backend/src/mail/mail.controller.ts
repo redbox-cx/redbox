@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Req, UnauthorizedException, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, UnauthorizedException, UseGuards, UseInterceptors, Query, Param } from '@nestjs/common';
 import { MailService } from './mail.service';
 import { IncomingMailDto } from './dto/incoming-mail.dto';
 import type { Request } from 'express';
@@ -14,12 +14,35 @@ export class MailController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  async listMyMails(@GetUserId() userId: string) {
-    const mails = await this.mailService.getUserMails(userId);
+  async listMyMails(
+    @GetUserId() userId: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 50;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+
+    const safeLimit = parsedLimit > 100 ? 100 : parsedLimit;
+
+    const data = await this.mailService.getUserMails(userId, safeLimit, parsedOffset);
     
     return { 
         message: 'Mails fetched successfully', 
-        result: mails 
+        result: data
+    };
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  async getSingleMail(
+    @GetUserId() userId: string,
+    @Param('id') mailId: string
+  ) {
+    const mail = await this.mailService.getSingleMail(userId, mailId);
+    
+    return {
+        message: 'Mail fetched successfully',
+        result: mail
     };
   }
 
