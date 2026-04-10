@@ -52,6 +52,7 @@ model User {
   files          File[]
   links          Link[]
   bins           Bin[]
+  inbox          Mail[]
 
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
@@ -116,4 +117,16 @@ model Bin {
   // e2ee
   encryptedBinKey String @db.Text
   binKeyIv        String @db.VarChar(50)
+}
+
+model Mail {
+  id        String   @id @default(uuid())
+  subject   String?  @db.VarChar(255)
+  from      String   @db.VarChar(255)
+  to        String   @db.VarChar(255)
+  content   String   @db.LongText
+  isRead    Boolean  @default(false)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
 }

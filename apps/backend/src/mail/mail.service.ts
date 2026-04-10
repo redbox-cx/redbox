@@ -1,0 +1,66 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from 'src/prisma.service';
+import { simpleParser } from 'mailparser';
+import { IncomingMailDto } from './dto/incoming-mail.dto';
+
+@Injectable()
+export class MailService {
+  private readonly logger = new Logger(MailService.name);
+
+  constructor(private prisma: PrismaService) {}
+
+
+  async getUserMails(userId: string) {
+    const mails = await this.prisma.mail.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        subject: true,
+        from: true,
+        to: true,
+        content: true,
+        isRead: true,
+        createdAt: true
+      }
+    });
+
+    return mails;
+  }
+
+  
+  async processIncomingMail(dto: IncomingMailDto) {
+    try {
+      const emailParts = dto.to.split('@');
+      const username = emailParts[0].toLowerCase();
+
+      const user = await this.prisma.user.findUnique({
+        where: { username }
+      });
+
+      if (!user) {
+        this.logger.warn(`E-Mail deleted: User '${username}' does not exist.`);
+        return { status: 'ignored', reason: 'User not found' };
+      }
+
+      const parsed = await simpleParser(dto.raw);
+
+      const mail = await this.prisma.mail.create({
+        data: {
+          from: dto.from,
+          to: dto.to,
+          subject: parsed.subject || dto.subject || '(No subject)',
+          content: parsed.html || parsed.textAsHtml || parsed.text || '(No content)',
+          userId: user.id
+        }
+      });
+
+      this.logger.log(`Email from ${dto.from} for user '${username}' saved`);
+      return { status: 'success', mailId: mail.id };
+
+    } catch (error) {
+      this.logger.error('Error while parsing of the mail:', error);
+      throw error;
+    }
+  }
+}
