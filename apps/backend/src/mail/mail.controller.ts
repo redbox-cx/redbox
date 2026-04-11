@@ -5,6 +5,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { TransformInterceptor } from 'src/common/interceptors/transform.interceptor';
+import { timingSafeEqual } from 'crypto';
 
 @Controller('mail')
 @UseInterceptors(TransformInterceptor)
@@ -47,12 +48,21 @@ export class MailController {
   }
 
 
+
+  // using timingSafeEqual to prevent attackers from guessing the passphrase with respondtime
   @Post('incoming')
   async receiveMail(@Req() req: Request, @Body() dto: IncomingMailDto) {
     
     const webhookSecret = req.headers['x-redbox-webhook-secret'];
     
-    if (!webhookSecret || webhookSecret !== process.env.MAIL_WEBHOOK_SECRET) {
+    if (!webhookSecret || typeof webhookSecret !== 'string') {
+      throw new UnauthorizedException('Missing Webhook Secret');
+    }
+
+    const secretBuffer = Buffer.from(process.env.MAIL_WEBHOOK_SECRET || '');
+    const inputBuffer = Buffer.from(webhookSecret);
+
+    if (secretBuffer.length !== inputBuffer.length || !timingSafeEqual(secretBuffer, inputBuffer)) {
       throw new UnauthorizedException('Invalid Webhook Secret');
     }
 

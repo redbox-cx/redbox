@@ -67,15 +67,19 @@ export class MailService {
 
   async processIncomingMail(dto: IncomingMailDto) {
     try {
-      const emailParts = dto.to.split('@');
-      const username = emailParts[0].toLowerCase();
+      // sort clean mail
+      const emailMatch = dto.to.match(/<([^>]+)>/);
+      const cleanEmail = emailMatch ? emailMatch[1] : dto.to;
+      
+      // extract username
+      const username = cleanEmail.split('@')[0].toLowerCase().trim();
 
       const user = await this.prisma.user.findUnique({
         where: { username }
       });
 
       if (!user) {
-        this.logger.warn(`E-Mail deleted: User '${username}' does not exist.`);
+        this.logger.warn(`E-Mail rejected: User '${username}' does not exist. (Original TO: ${dto.to})`);
         return { status: 'ignored', reason: 'User not found' };
       }
 
