@@ -70,7 +70,7 @@ export class MailService {
     }
 
     try {
-      const mails = await this.prisma.mail.findMany({
+      const rawMails = await this.prisma.mail.findMany({
         where: whereCondition,
         orderBy,
         take: limit,
@@ -84,7 +84,19 @@ export class MailService {
           isArchived: true,
           isSpam: true,
           createdAt: true,
+          _count: {
+            select: { attachments: true}
+          }
         }
+      });
+
+      const mails = rawMails.map(mail => {
+        const { _count, ...rest } = mail;
+        return {
+          ...rest,
+          attachmentCount: _count.attachments,
+          hasAttachments: _count.attachments > 0       // true / false
+        };
       });
 
       const totalCount = await this.prisma.mail.count({ where: whereCondition });
@@ -97,63 +109,136 @@ export class MailService {
   }
 
   async getSingleMail(userId: string, mailId: string) {
-    const mail = await this.prisma.mail.findUnique({ where: { id: mailId } });
+    const mail = await this.prisma.mail.findUnique({ 
+      where: { id: mailId },
+      include: { attachments: true }
+    });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     
     if (!mail || mail.userId !== userId || !user) throw new NotFoundException('Mail not found');
 
-    // 1. Take masterkey from redis
+    // encryption
     const rawMasterKeyHex = await this.redis.get(`masterkey:${userId}`);
     if (!rawMasterKeyHex) {
         throw new UnauthorizedException('MasterKey not found in cache. Please re-login.');
     }
     const rawMasterKey = Buffer.from(rawMasterKeyHex, 'hex');
 
-    // 2. decrypt RSA Private Key of user
     const privDecipher = createDecipheriv('aes-256-cbc', rawMasterKey, Buffer.from(user.privateKeyIv, 'hex'));
     let privateKeyPem = privDecipher.update(Buffer.from(user.encryptedPrivateKey, 'hex'));
     privateKeyPem = Buffer.concat([privateKeyPem, privDecipher.final()]);
 
-    // 3. decrypt mail-specific aes-key
     const mailKey = privateDecrypt(
         privateKeyPem.toString('utf8'),
         Buffer.from(mail.encryptedMailKey, 'hex')
     );
 
-    // 4. take encrypted content from s3
     const s3Response = await this.s3.send(new GetObjectCommand({
       Bucket: this.bucket,
       Key: mail.storageKey,
     }));
     const encryptedContentBuffer = Buffer.from(await s3Response.Body!.transformToByteArray());
 
-    // 5. decrypt content
     const contentDecipher = createDecipheriv('aes-256-cbc', mailKey, Buffer.from(mail.mailKeyIv, 'hex'));
     let decryptedContent = contentDecipher.update(encryptedContentBuffer);
     decryptedContent = Buffer.concat([decryptedContent, contentDecipher.final()]);
 
-    // update read-status
     if (!mail.isRead) {
       await this.prisma.mail.update({ where: { id: mailId }, data: { isRead: true } });
     }
 
-    return { ...mail, content: decryptedContent.toString('utf8') };
+    const formattedAttachments = mail.attachments.map(att => ({
+      id: att.id,
+      filename: att.filename,
+      mimetype: att.mimetype,
+      size: att.size
+    }));
+
+    const { storageKey, encryptedMailKey, mailKeyIv, attachments, ...safeMailData } = mail;
+
+    return { 
+      ...safeMailData, 
+      content: decryptedContent.toString('utf8'),
+      attachments: formattedAttachments
+    };
+  }
+
+
+  async downloadAttachment(userId: string, mailId: string, attachmentId: string) {
+    // get user, mail and the attachement
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const mail = await this.prisma.mail.findUnique({
+      where: { id: mailId },
+      include: { attachments: { where: { id: attachmentId } } }
+    });
+
+    if (!user || !mail || mail.userId !== userId || mail.attachments.length === 0) {
+      throw new NotFoundException('Attachment not found or access denied');
+    }
+
+    const attachment = mail.attachments[0];
+
+    // get keys
+    const rawMasterKeyHex = await this.redis.get(`masterkey:${userId}`);
+    if (!rawMasterKeyHex) throw new UnauthorizedException('MasterKey not found in cache. Please re-login.');
+    const rawMasterKey = Buffer.from(rawMasterKeyHex, 'hex');
+
+    const privDecipher = createDecipheriv('aes-256-cbc', rawMasterKey, Buffer.from(user.privateKeyIv, 'hex'));
+    let privateKeyPem = privDecipher.update(Buffer.from(user.encryptedPrivateKey, 'hex'));
+    privateKeyPem = Buffer.concat([privateKeyPem, privDecipher.final()]);
+
+    const mailKey = privateDecrypt(
+        privateKeyPem.toString('utf8'),
+        Buffer.from(mail.encryptedMailKey, 'hex')
+    );
+
+    // get encrypted attachement
+    const s3Response = await this.s3.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: attachment.storageKey,
+    }));
+    const encryptedAttBuffer = Buffer.from(await s3Response.Body!.transformToByteArray());
+
+    // decrypt attachement
+    const attDecipher = createDecipheriv('aes-256-cbc', mailKey, Buffer.from(mail.mailKeyIv, 'hex'));
+    let decryptedAtt = attDecipher.update(encryptedAttBuffer);
+    decryptedAtt = Buffer.concat([decryptedAtt, attDecipher.final()]);
+
+    return {
+      buffer: decryptedAtt,
+      filename: attachment.filename,
+      mimetype: attachment.mimetype,
+      size: attachment.size
+    };
   }
 
 
   async deleteMail(userId: string, mailId: string) {
-    const mail = await this.prisma.mail.findFirst({ where: { id: mailId, userId } });
+    // load mail + attachements from db
+    const mail = await this.prisma.mail.findFirst({ 
+      where: { id: mailId, userId },
+      include: { attachments: true } 
+    });
+    
     if (!mail) throw new NotFoundException('Mail not found');
 
-    // del from s3
-    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: mail.storageKey })).catch(err => {
-      this.logger.error(`Failed to delete S3 object ${mail.storageKey}`, err);
-    });
+    // collect all s3 keys
+    const s3KeysToDelete = [
+      mail.storageKey, 
+      ...mail.attachments.map(att => att.storageKey)
+    ];
 
-    // del from db
+    // delete the files from s3/minIO
+    await Promise.all(s3KeysToDelete.map(key => 
+      this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
+        .catch(err => this.logger.error(`Failed to delete S3 object ${key}`, err))
+    ));
+
+    // delete from db
     await this.prisma.mail.delete({ where: { id: mailId } });
     return { success: true };
   }
+
 
   async moveMail(userId: string, mailId: string, folder: string) {
     const mail = await this.prisma.mail.findFirst({ where: { id: mailId, userId } });
@@ -172,6 +257,8 @@ export class MailService {
 
     return { success: true, folder };
   }
+
+  // --- BULK ACTIONS ---
 
   async bulkMoveMails(userId: string, mailIds: string[], folder: string) {
     let isArchived = false;
@@ -195,19 +282,29 @@ export class MailService {
     return { success: true };
   }
 
-  // --- BULK ACTIONS ---
-
   async bulkDeleteMails(userId: string, mailIds: string[]) {
-    const mails = await this.prisma.mail.findMany({ where: { id: { in: mailIds }, userId } });
+    // load mails
+    const mails = await this.prisma.mail.findMany({ 
+      where: { id: { in: mailIds }, userId },
+      include: { attachments: true }
+    });
     
-    // del all found mails from s3
-    await Promise.all(mails.map(mail => 
-      this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: mail.storageKey })).catch(err => 
-        this.logger.error(`Failed to delete S3 object ${mail.storageKey}`, err)
-      )
+    // collect s3 keys
+    const s3KeysToDelete: string[] = [];
+    for (const mail of mails) {
+      s3KeysToDelete.push(mail.storageKey);
+      for (const att of mail.attachments) {
+        s3KeysToDelete.push(att.storageKey);
+      }
+    }
+
+    // delete from s3
+    await Promise.all(s3KeysToDelete.map(key => 
+      this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
+        .catch(err => this.logger.error(`Failed to delete S3 object ${key}`, err))
     ));
 
-    // del from db
+    // delete from db
     const result = await this.prisma.mail.deleteMany({ where: { id: { in: mailIds }, userId } });
     return { deletedCount: result.count };
   }
@@ -276,10 +373,39 @@ export class MailService {
       ContentType: 'application/octet-stream',
     }));
 
-    const encryptedMailKey = publicEncrypt(
-        user.publicKey,
-        mailKey
-    ).toString('hex');
+    // attachements
+    interface AttachmentData {
+      filename: string;
+      mimetype: string;
+      size: number;
+      storageKey: string;
+    }
+    const attachmentData: AttachmentData[] = [];
+    
+    if (parsed.attachments && parsed.attachments.length > 0) {
+      for (const attachment of parsed.attachments) {
+        const attachmentStorageKey = `mail_att_${uuidv4()}.bin`;
+        
+        const attCipher = createCipheriv('aes-256-cbc', mailKey, mailIv);
+        const encryptedAtt = Buffer.concat([attCipher.update(attachment.content), attCipher.final()]);
+
+        await this.s3.send(new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: attachmentStorageKey,
+          Body: encryptedAtt,
+          ContentType: 'application/octet-stream',
+        }));
+
+        attachmentData.push({
+          filename: attachment.filename || 'unknown_file',
+          mimetype: attachment.contentType || 'application/octet-stream',
+          size: attachment.size || encryptedAtt.length,
+          storageKey: attachmentStorageKey
+        });
+      }
+    }
+
+    const encryptedMailKey = publicEncrypt(user.publicKey, mailKey).toString('hex');
 
     const mail = await this.prisma.mail.create({
       data: {
@@ -289,10 +415,15 @@ export class MailService {
         storageKey: storageKey,
         userId: user.id,
         encryptedMailKey: encryptedMailKey,
-        mailKeyIv: mailIv.toString('hex')
+        mailKeyIv: mailIv.toString('hex'),
+        
+        attachments: {
+          create: attachmentData
+        }
       }
     });
 
+    this.logger.log(`Email from ${dto.from} for user '${username}' saved (Attachments: ${attachmentData.length})`);
     return { status: 'success', mailId: mail.id };
   }
 }

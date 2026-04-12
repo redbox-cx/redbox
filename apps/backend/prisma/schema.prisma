@@ -125,14 +125,15 @@ model Bin {
 }
 
 model Mail {
-  id         String   @id @default(uuid())
-  subject    String?  @db.VarChar(255)
-  from       String   @db.VarChar(255)
-  to         String   @db.VarChar(255)
-  storageKey String   @unique // name of file in MinIO
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  createdAt  DateTime @default(now())
+  id          String           @id @default(uuid())
+  subject     String?          @db.VarChar(255)
+  from        String           @db.VarChar(255)
+  to          String           @db.VarChar(255)
+  storageKey  String           @unique // name of file in MinIO
+  userId      String
+  user        User             @relation(fields: [userId], references: [id])
+  createdAt   DateTime         @default(now())
+  attachments MailAttachment[]
 
   isRead     Boolean @default(false)
   isArchived Boolean @default(false)
@@ -150,4 +151,15 @@ model BlockedSender {
   createdAt DateTime @default(now())
 
   @@unique([userId, email])
+}
+
+model MailAttachment {
+  id         String @id @default(uuid())
+  filename   String @db.VarChar(255)
+  mimetype   String @db.VarChar(100)
+  size       Int
+  storageKey String @unique // name in MinIO/S3
+
+  mailId String
+  mail   Mail   @relation(fields: [mailId], references: [id], onDelete: Cascade)
 }

@@ -19,16 +19,19 @@ async function bootstrap() {
   });
 
 
-  // --- Body Parser Limit (larger for /bins endpoint) ---
-
-  const largeBodyRoutes = [`/api/v1/bins`];
+  // --- Body Parser Limit (larger for /bins + mail endpoint) ---
 
   app.use((req, res, next) => {
-    const isLargeBodyRoute = largeBodyRoutes.some(route => req.originalUrl.startsWith(route));
-    
-    if (isLargeBodyRoute) {
+    // Cloudflare Incoming Mail (max 25MB Mail + JSON Overhead = ~35MB)
+    if (req.originalUrl.startsWith('/api/v1/mail/incoming')) {
+      json({ limit: '50mb' })(req, res, next);
+    } 
+    // Pastebin / Bins
+    else if (req.originalUrl.startsWith('/api/v1/bins')) {
       json({ limit: '3mb' })(req, res, next);
-    } else {
+    } 
+    // default limit for all other routes
+    else {
       json({ limit: '100kb' })(req, res, next);
     }
   });

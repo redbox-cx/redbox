@@ -1,7 +1,7 @@
-import { Controller, Post, Get, Body, Req, UnauthorizedException, UseGuards, UseInterceptors, Query, Param, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, Res, UnauthorizedException, UseGuards, UseInterceptors, Query, Param, Patch, Delete } from '@nestjs/common';
 import { MailService } from './mail.service';
 import { IncomingMailDto } from './dto/incoming-mail.dto';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { TransformInterceptor } from 'src/common/interceptors/transform.interceptor';
@@ -53,6 +53,26 @@ export class MailController {
     return { message: 'Mail fetched successfully', result: mail };
   }
 
+
+  @Get(':mailId/attachment/:attachmentId')
+  @UseGuards(JwtAuthGuard)
+  async downloadAttachment(
+    @GetUserId() userId: string,
+    @Param('mailId') mailId: string,
+    @Param('attachmentId') attachmentId: string,
+    @Res() res: Response
+  ) {
+    const file = await this.mailService.downloadAttachment(userId, mailId, attachmentId);
+
+    // set header
+    res.set({
+      'Content-Type': file.mimetype,
+      'Content-Length': file.buffer.length,
+      'Content-Disposition': `attachment; filename="${file.filename}"`
+    });
+    
+    res.send(file.buffer);
+  }
 
   // --- SINGLE ACTIONS ---
 
