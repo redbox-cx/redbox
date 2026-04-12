@@ -48,11 +48,12 @@ model User {
   createdAt   DateTime   @default(now())
   issuedCodes Int        @default(0) // amount of codes the user made
 
-  generatedCodes InviteCode[] @relation("GeneratedBy")
+  generatedCodes InviteCode[]    @relation("GeneratedBy")
   files          File[]
   links          Link[]
   bins           Bin[]
   inbox          Mail[]
+  blockedSenders BlockedSender[]
 
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
@@ -120,13 +121,26 @@ model Bin {
 }
 
 model Mail {
+  id         String   @id @default(uuid())
+  subject    String?  @db.VarChar(255)
+  from       String   @db.VarChar(255)
+  to         String   @db.VarChar(255)
+  storageKey String   @unique // name of file in MinIO
+  isRead     Boolean  @default(false)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  createdAt  DateTime @default(now())
+
+  isArchived Boolean @default(false)
+  isSpam     Boolean @default(false)
+}
+
+model BlockedSender {
   id        String   @id @default(uuid())
-  subject   String?  @db.VarChar(255)
-  from      String   @db.VarChar(255)
-  to        String   @db.VarChar(255)
-  content   String   @db.LongText
-  isRead    Boolean  @default(false)
+  email     String
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  @@unique([userId, email])
 }

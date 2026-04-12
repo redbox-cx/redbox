@@ -1,29 +1,40 @@
 import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotFoundException, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
-import { diskStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
-import * as fs from 'fs';
-import { join } from 'path';
 import { Redis } from 'ioredis';
-import { pipeline, finished } from 'stream/promises';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as bcrypt from 'bcryptjs';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { addDays } from 'date-fns';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import {
+    S3Client, CreateMultipartUploadCommand, UploadPartCommand,
+    CompleteMultipartUploadCommand, GetObjectCommand, DeleteObjectCommand,
+    ListObjectsV2Command, AbortMultipartUploadCommand
+} from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
+import { memoryStorage } from 'multer';
 
 @Injectable()
 export class FilesService {
     private readonly logger = new Logger(FilesService.name);
-    private readonly uploadFolder = process.env.UPLOAD_LOCATION || './uploads';
-    private readonly tempFolder = join(this.uploadFolder, 'temp');
     private readonly MAX_QUOTA = 2 * 1024 * 1024 * 1024; // 2GB
+    private readonly s3: S3Client;
+    private readonly bucket = process.env.S3_BUCKET_FILES || 'redbox-files';
 
     constructor(
         private prisma: PrismaService,
-        @InjectRedis() private readonly redis: Redis 
+        @InjectRedis() private readonly redis: Redis
     ) {
-        if (!fs.existsSync(this.tempFolder)) fs.mkdirSync(this.tempFolder, { recursive: true });
+        this.s3 = new S3Client({
+            endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
+            region: 'us-east-1',
+            credentials: {
+                accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
+                secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
+            },
+            forcePathStyle: true,
+        });
     }
 
     async initializeUpload(userId: string, fileSize: number, totalChunks: number, password?: string) {
@@ -34,65 +45,75 @@ export class FilesService {
                 where: { userId },
                 _sum: { size: true },
             });
-
             const currentUsage = Number(aggregation._sum?.size ?? 0);
-
             if (currentUsage + fileSize > this.MAX_QUOTA) {
                 throw new BadRequestException('Quota exceeded');
             }
         });
 
         const uploadId = uuidv4();
+        const storageKey = `${uuidv4()}.bin`;
         const passwordHash = password ? await bcrypt.hash(password, 12) : null;
+
+        const s3Init = await this.s3.send(new CreateMultipartUploadCommand({
+            Bucket: this.bucket,
+            Key: storageKey,
+        }));
 
         await this.redis.set(
             `upload:meta:${userId}:${uploadId}`,
-            JSON.stringify({ totalChunks, nextExpectedChunk: 0, fileSize, passwordHash }),
+            JSON.stringify({
+                totalChunks,
+                nextExpectedChunk: 0,
+                fileSize,
+                passwordHash,
+                storageKey,
+                s3UploadId: s3Init.UploadId,
+                parts: []
+            }),
             'EX', 86400
         );
 
         return { uploadId };
     }
 
-
     async handleChunk(userId: string, uploadId: string, file: Express.Multer.File, chunkIndex: number) {
-        if (!file || !file.path) throw new BadRequestException('File data is missing');
+        if (!file || !file.buffer) throw new BadRequestException('File data is missing');
 
         const metaKey = `upload:meta:${userId}:${uploadId}`;
         const metaStr = await this.redis.get(metaKey);
 
-        if (!metaStr) {
-            this.cleanupPhysicalFile(file.path);
-            throw new BadRequestException('Invalid or expired Upload ID');
-        }
+        if (!metaStr) throw new BadRequestException('Invalid or expired Upload ID');
 
         const meta = JSON.parse(metaStr);
 
         if (Number(chunkIndex) !== meta.nextExpectedChunk) {
-            this.cleanupPhysicalFile(file.path);
             throw new BadRequestException(`Wrong chunk order. Expected index ${meta.nextExpectedChunk}`);
         }
 
         if (Number(chunkIndex) >= meta.totalChunks) {
-            this.cleanupPhysicalFile(file.path);
             throw new BadRequestException(`Invalid chunk index. Total chunks is ${meta.totalChunks}`);
         }
 
+        const partNumber = chunkIndex + 1;
 
-        const userTempDir = join(this.tempFolder, `user_${userId}`, uploadId);
-        if (!fs.existsSync(userTempDir)) fs.mkdirSync(userTempDir, { recursive: true });
+        const uploadResult = await this.s3.send(new UploadPartCommand({
+            Bucket: this.bucket,
+            Key: meta.storageKey,
+            UploadId: meta.s3UploadId,
+            PartNumber: partNumber,
+            Body: file.buffer,
+        }));
 
-        const chunkPath = join(userTempDir, chunkIndex.toString());
-        fs.renameSync(file.path, chunkPath);
-
+        meta.parts.push({ PartNumber: partNumber, ETag: uploadResult.ETag });
         meta.nextExpectedChunk++;
+
         await this.redis.set(metaKey, JSON.stringify(meta), 'EX', 86400);
 
         return { message: `Chunk ${chunkIndex} accepted` };
     }
 
-    async finalizeUpload(userId, uploadId, fileName, mimetype, fileKeyFromFrontend) {
-
+    async finalizeUpload(userId: string, uploadId: string, fileName: string, mimetype: string, fileKeyFromFrontend: string) {
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
         if (!masterKeyHex) throw new UnauthorizedException('Session expired');
         const masterKey = Buffer.from(masterKeyHex, 'hex');
@@ -102,97 +123,85 @@ export class FilesService {
         let encryptedFileKey = cipher.update(fileKeyFromFrontend, 'utf8', 'hex');
         encryptedFileKey += cipher.final('hex');
 
-
-        const userTempDir = join(this.tempFolder, `user_${userId}`, uploadId);
-        const finalStorageName = `${uuidv4()}.bin`;
-        const finalPath = join(this.uploadFolder, finalStorageName);
-
         const metaStr = await this.redis.get(`upload:meta:${userId}:${uploadId}`);
         if (!metaStr) throw new BadRequestException('Metadata expired');
         const meta = JSON.parse(metaStr);
 
-        const writeStream = fs.createWriteStream(finalPath);
+        if (meta.parts.length !== meta.totalChunks) {
+            throw new BadRequestException('Not all chunks uploaded yet');
+        }
 
         try {
-            const trustedTotalChunks = meta.totalChunks;
-
-            for (let i = 0; i < trustedTotalChunks; i++) {
-                const chunkPath = join(userTempDir, i.toString());
-                if (!fs.existsSync(chunkPath)) throw new Error(`Chunk ${i} fehlt`);
-
-                const readStream = fs.createReadStream(chunkPath);
-                await pipeline(readStream, writeStream, { end: false });
-                
-                fs.unlinkSync(chunkPath);
-            }
-
-            writeStream.end();
-
-            await new Promise<void>((resolve) => writeStream.on('finish', () => resolve()));
-
-            fs.rmdirSync(userTempDir);
+            await this.s3.send(new CompleteMultipartUploadCommand({
+                Bucket: this.bucket,
+                Key: meta.storageKey,
+                UploadId: meta.s3UploadId,
+                MultipartUpload: {
+                    Parts: meta.parts.sort((a, b) => a.PartNumber - b.PartNumber),
+                },
+            }));
 
             const fileRecord = await this.prisma.file.create({
                 data: {
                     originalName: fileName,
-                    storageName: finalStorageName,  
-                    size: fs.statSync(finalPath).size,
+                    storageName: meta.storageKey,
+                    size: meta.fileSize,
                     mimetype,
                     userId,
                     passwordHash: meta.passwordHash,
                     expiresAt: addDays(new Date(), 30),
                     encryptedFileKey,
-                    fileKeyIv: fileKeyIv.toString('hex')
+                    fileKeyIv: fileKeyIv.toString('hex'),
                 },
             });
 
             await this.redis.del(`upload:meta:${userId}:${uploadId}`);
             return fileRecord;
+
         } catch (error) {
-            writeStream?.destroy();
-            if (fs.existsSync(finalPath)) {
-                fs.unlinkSync(finalPath);
-            }
+            await this.s3.send(new AbortMultipartUploadCommand({
+                Bucket: this.bucket,
+                Key: meta.storageKey,
+                UploadId: meta.s3UploadId,
+            })).catch(() => {});
+
             this.logger.error(`Finalize failed for uploadId ${uploadId}:`, error);
             throw new InternalServerErrorException('Finalize failed');
         }
     }
 
     async downloadFile(fileId: string, token: string, providedPassword?: string) {
-        // search file
         const file = await this.prisma.file.findUnique({ where: { id: fileId } });
-        
+
         if (!file || file.shareToken !== token) {
             throw new NotFoundException('File not found or invalid token');
         }
 
-        // test expiry
         if (new Date() > file.expiresAt) {
             await this.deleteFileInternal(file.id);
             throw new NotFoundException('File has expired');
         }
 
-        // password-gatekeeper
         if (file.passwordHash) {
             if (!providedPassword) throw new ForbiddenException('This file is password protected');
             const isMatch = await bcrypt.compare(providedPassword, file.passwordHash);
             if (!isMatch) throw new ForbiddenException('Incorrect password');
         }
 
-        // prepare stream
-        const filePath = join(this.uploadFolder, file.storageName);
-        if (!fs.existsSync(filePath)) throw new InternalServerErrorException('Physical file missing');
+        const s3Response = await this.s3.send(new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: file.storageName,
+        }));
 
-        const stream = fs.createReadStream(filePath);
+        if (!s3Response.Body) throw new InternalServerErrorException('File not found in storage');
 
         return {
-            stream,
+            stream: s3Response.Body as Readable,
             fileName: file.originalName,
             mimeType: file.mimetype,
         };
     }
 
-    // helpfunction for quota in frontend + decryption-key
     async getUserFilesWithQuota(userId: string) {
         const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
         if (!masterKeyHex) throw new UnauthorizedException('Session expired');
@@ -200,16 +209,18 @@ export class FilesService {
 
         const files = await this.prisma.file.findMany({
             where: { userId },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
         });
 
         const processedFiles = files.map(file => {
-            let decryptedKey = "";
+            let decryptedKey = '';
             try {
                 const decipher = createDecipheriv('aes-256-cbc', masterKey, Buffer.from(file.fileKeyIv, 'hex'));
                 decryptedKey = decipher.update(file.encryptedFileKey, 'hex', 'utf8');
                 decryptedKey += decipher.final('utf8');
-            } catch (e) { decryptedKey = "error"; }
+            } catch (e) {
+                decryptedKey = 'error';
+            }
 
             return {
                 id: file.id,
@@ -218,34 +229,34 @@ export class FilesService {
                 mimetype: file.mimetype,
                 createdAt: file.createdAt,
                 expiresAt: file.expiresAt,
-                shareLink: `/d/${file.id}?token=${file.shareToken}#${decryptedKey}`
+                shareLink: `/d/${file.id}?token=${file.shareToken}#${decryptedKey}`,
             };
         });
 
         const aggregation = await this.prisma.file.aggregate({ where: { userId }, _sum: { size: true } });
         return { files: processedFiles, totalUsed: aggregation._sum.size || 0 };
     }
-    // --- CLEANUP & MAINTENANCE ---
 
     @Cron(CronExpression.EVERY_HOUR)
     async handleCleanup() {
         const expiredFiles = await this.prisma.file.findMany({
-            where: { expiresAt: { lt: new Date() } }
+            where: { expiresAt: { lt: new Date() } },
         });
 
         for (const file of expiredFiles) {
             await this.deleteFileInternal(file.id);
             this.logger.log(`Auto-deleted expired file: ${file.originalName}`);
         }
-
-        await this.cleanupStaleTempDirs();
     }
 
     private async deleteFileInternal(fileId: string) {
         const file = await this.prisma.file.findUnique({ where: { id: fileId } });
         if (file) {
-            const path = join(this.uploadFolder, file.storageName);
-            if (fs.existsSync(path)) fs.unlinkSync(path);
+            await this.s3.send(new DeleteObjectCommand({
+                Bucket: this.bucket,
+                Key: file.storageName,
+            })).catch(err => this.logger.warn(`S3 delete failed for ${file.storageName}: ${err.message}`));
+
             await this.prisma.file.delete({ where: { id: fileId } });
         }
     }
@@ -258,44 +269,11 @@ export class FilesService {
         await this.deleteFileInternal(fileId);
         return { message: 'Deleted' };
     }
-
-    private cleanupPhysicalFile(path: string) {
-        if (fs.existsSync(path)) fs.unlinkSync(path);
-    }
-
-    private async cleanupStaleTempDirs() {
-    const userTempBase = join(this.tempFolder);
-    if (!fs.existsSync(userTempBase)) return;
-
-    const userDirs = fs.readdirSync(userTempBase);
-
-    for (const userDir of userDirs) {
-        const uploadDirs = fs.readdirSync(join(userTempBase, userDir));
-
-        for (const uploadId of uploadDirs) {
-            // does redis key exist?
-            const userId = userDir.replace('user_', '');
-            const metaKey = `upload:meta:${userId}:${uploadId}`;
-            const exists = await this.redis.exists(metaKey);
-
-            if (!exists) {
-                const dirPath = join(userTempBase, userDir, uploadId);
-                fs.rmSync(dirPath, { recursive: true });
-                this.logger.log(`Cleaned up stale upload: ${uploadId}`);
-            }
-        }
-    }
-}
 }
 
-// Multer Storage Config
 export const storageConfig = {
-    storage: diskStorage({
-        destination: (req, file, callback) => {
-            const dest = join(process.env.UPLOAD_LOCATION || './uploads', 'multer_temp');
-            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-            callback(null, dest);
-        },
-        filename: (req, file, callback) => callback(null, uuidv4()),
-    }),
+    limits: {
+        fileSize: 100 * 1024 * 1024, 
+    },
+    storage: memoryStorage(),
 };
