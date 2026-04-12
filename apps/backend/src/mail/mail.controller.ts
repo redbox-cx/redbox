@@ -21,7 +21,8 @@ export class MailController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
     @Query('sort') sort?: string,   // 'newest', 'oldest', 'unread', 'read'
-    @Query('folder') folder?: string // 'inbox', 'archive', 'spam', 'all'
+    @Query('folder') folder?: string, // 'inbox', 'archive', 'spam', 'all'
+    @Query('search') search?: string
   ) {
     const parsedLimit = limit ? parseInt(limit, 10) : 50;
     const parsedOffset = offset ? parseInt(offset, 10) : 0;
@@ -35,7 +36,8 @@ export class MailController {
       safeLimit, 
       parsedOffset, 
       sortMethod, 
-      folderMethod
+      folderMethod,
+      search
     );
     
     return { message: 'Mails fetched successfully', result: data };

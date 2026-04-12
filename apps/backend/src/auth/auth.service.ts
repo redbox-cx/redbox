@@ -6,14 +6,13 @@ import { LoginDto } from './dto/login-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { RegisterUsersDto } from './dto/register-user.dto';
 import { UserRole, UserStatus } from '@prisma/client';
-import { randomUUID, scrypt, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
+import { randomUUID, scrypt, randomBytes, createCipheriv, createDecipheriv, createHash, generateKeyPairSync } from 'crypto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { RecoverPasswordDto } from './dto/recover-password.dto';
 import { promisify } from 'util';
 import { Redis } from 'ioredis';
 import {InjectRedis} from '@nestjs-modules/ioredis';
 import * as bip39 from 'bip39';
-import { createHash } from 'crypto';
 
 
 const scryptAsync = promisify(scrypt);
@@ -170,6 +169,18 @@ export class AuthService {
 
         // 4. hash recoveryphrase
         const hashedRecoveryPhrase = await this.hashRecoveryPhrase(recoveryPhrase);
+
+        const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+        });
+
+        // encrypt private key with masterkey
+        const privIv = randomBytes(16);
+        const privCipher = createCipheriv('aes-256-cbc', rawMasterKey, privIv);
+        let encPrivateKey = privCipher.update(privateKey).toString('hex');
+        encPrivateKey += privCipher.final().toString('hex');
         
         try {
             const result = await this.prismaService.$transaction(async (prisma) => {
@@ -190,6 +201,10 @@ export class AuthService {
                         recoveryEncryptedMasterKey: recoveryMkStore.encrypted,
                         recoveryMasterKeyIv: recoveryMkStore.iv,
                         recoveryMasterKeySalt: recoveryMkStore.salt,
+
+                        publicKey: publicKey,
+                        encryptedPrivateKey: encPrivateKey,
+                        privateKeyIv: privIv.toString('hex'),
                     }
                 });
 
@@ -292,7 +307,7 @@ export class AuthService {
         rawMasterKey = Buffer.concat([rawMasterKey, decipher.final()]);
 
         // 3. Encrypt Masterkey with the new password
-        const newMkStore = await this.generateMasterKeyStore(dto.newPassword, rawMasterKey);
+            const newMkStore = await this.generateMasterKeyStore(dto.newPassword, rawMasterKey);
 
         // 4. DB Update
         await this.prismaService.user.update({

@@ -1,9 +1,12 @@
-import { Injectable, Logger, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { simpleParser } from 'mailparser';
 import { IncomingMailDto } from './dto/incoming-mail.dto';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
+import { publicEncrypt, privateDecrypt, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import { Redis } from 'ioredis';
 
 
 @Injectable()
@@ -13,7 +16,10 @@ export class MailService {
   private readonly s3: S3Client;
   private readonly bucket = process.env.S3_BUCKET_MAILS || 'redbox-mails';
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    @InjectRedis() private readonly redis: Redis
+  ){
     this.s3 = new S3Client({
       endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
       region: 'us-east-1',
@@ -30,7 +36,8 @@ export class MailService {
     limit: number = 50, 
     offset: number = 0, 
     sort: string = 'newest',
-    folder: string = 'inbox'
+    folder: string = 'inbox',
+    search?: string
   ) {
     let orderBy: any = { createdAt: 'desc' };
 
@@ -50,47 +57,87 @@ export class MailService {
       whereCondition.isSpam = true;
     } 
 
-    const mails = await this.prisma.mail.findMany({
-      where: whereCondition,
-      orderBy,
-      take: limit,
-      skip: offset,
-      select: {
-        id: true,
-        subject: true,
-        from: true,
-        to: true,
-        isRead: true,
-        isArchived: true,
-        isSpam: true,
-        createdAt: true,
-      }
-    });
+    if (search && search.trim() !== '') {
+      const searchTerm = search.trim();
+      whereCondition.AND = [
+        {
+          OR:[
+            { subject: { contains: searchTerm } },
+            { from: { contains: searchTerm } }
+          ]
+        }
+      ];
+    }
 
-    const totalCount = await this.prisma.mail.count({ where: whereCondition });
-    
-    return { mails, totalCount, folder };
+    try {
+      const mails = await this.prisma.mail.findMany({
+        where: whereCondition,
+        orderBy,
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          subject: true,
+          from: true,
+          to: true,
+          isRead: true,
+          isArchived: true,
+          isSpam: true,
+          createdAt: true,
+        }
+      });
+
+      const totalCount = await this.prisma.mail.count({ where: whereCondition });
+      
+      return { mails, totalCount, folder, search };
+    } catch (error) {
+      this.logger.error(`Error fetching mails for user ${userId}:`, error);
+      throw new InternalServerErrorException('Could not fetch emails');
+    }
   }
 
   async getSingleMail(userId: string, mailId: string) {
     const mail = await this.prisma.mail.findUnique({ where: { id: mailId } });
-    if (!mail || mail.userId !== userId) throw new NotFoundException('Mail not found');
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!mail || mail.userId !== userId || !user) throw new NotFoundException('Mail not found');
 
+    // 1. Take masterkey from redis
+    const rawMasterKeyHex = await this.redis.get(`masterkey:${userId}`);
+    if (!rawMasterKeyHex) {
+        throw new UnauthorizedException('MasterKey not found in cache. Please re-login.');
+    }
+    const rawMasterKey = Buffer.from(rawMasterKeyHex, 'hex');
+
+    // 2. decrypt RSA Private Key of user
+    const privDecipher = createDecipheriv('aes-256-cbc', rawMasterKey, Buffer.from(user.privateKeyIv, 'hex'));
+    let privateKeyPem = privDecipher.update(Buffer.from(user.encryptedPrivateKey, 'hex'));
+    privateKeyPem = Buffer.concat([privateKeyPem, privDecipher.final()]);
+
+    // 3. decrypt mail-specific aes-key
+    const mailKey = privateDecrypt(
+        privateKeyPem.toString('utf8'),
+        Buffer.from(mail.encryptedMailKey, 'hex')
+    );
+
+    // 4. take encrypted content from s3
+    const s3Response = await this.s3.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: mail.storageKey,
+    }));
+    const encryptedContentBuffer = Buffer.from(await s3Response.Body!.transformToByteArray());
+
+    // 5. decrypt content
+    const contentDecipher = createDecipheriv('aes-256-cbc', mailKey, Buffer.from(mail.mailKeyIv, 'hex'));
+    let decryptedContent = contentDecipher.update(encryptedContentBuffer);
+    decryptedContent = Buffer.concat([decryptedContent, contentDecipher.final()]);
+
+    // update read-status
     if (!mail.isRead) {
       await this.prisma.mail.update({ where: { id: mailId }, data: { isRead: true } });
     }
 
-    try {
-      const s3Response = await this.s3.send(new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: mail.storageKey,
-      }));
-      const content = await s3Response.Body!.transformToString('utf-8');
-      return { ...mail, content };
-    } catch (err) {
-      this.logger.error('S3 GetObject Error:', err);
-      throw new InternalServerErrorException('Could not load email content from storage');
-    }
+    return { ...mail, content: decryptedContent.toString('utf8') };
   }
 
 
@@ -214,14 +261,25 @@ export class MailService {
 
     const parsed = await simpleParser(dto.raw);
     const mailContent = parsed.html || parsed.textAsHtml || parsed.text || '(No content)';
-    const storageKey = `mail_${uuidv4()}.html`;
+    const storageKey = `mail_${uuidv4()}.bin`;
+
+    const mailKey = randomBytes(32);
+    const mailIv = randomBytes(16);
+
+    const cipher = createCipheriv('aes-256-cbc', mailKey, mailIv);
+    const encryptedContent = Buffer.concat([cipher.update(mailContent, 'utf8'), cipher.final()]);
 
     await this.s3.send(new PutObjectCommand({
       Bucket: this.bucket,
       Key: storageKey,
-      Body: mailContent,
-      ContentType: 'text/html',
+      Body: encryptedContent,
+      ContentType: 'application/octet-stream',
     }));
+
+    const encryptedMailKey = publicEncrypt(
+        user.publicKey,
+        mailKey
+    ).toString('hex');
 
     const mail = await this.prisma.mail.create({
       data: {
@@ -229,11 +287,12 @@ export class MailService {
         to: dto.to,
         subject: parsed.subject || dto.subject || '(No subject)',
         storageKey: storageKey,
-        userId: user.id
+        userId: user.id,
+        encryptedMailKey: encryptedMailKey,
+        mailKeyIv: mailIv.toString('hex')
       }
     });
 
-    this.logger.log(`Email from ${dto.from} for user '${username}' saved to MinIO`);
     return { status: 'success', mailId: mail.id };
   }
 }
