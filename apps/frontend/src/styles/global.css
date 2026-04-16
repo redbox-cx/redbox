@@ -25,6 +25,15 @@ html.dash-page body {
     overflow: hidden;
 }
 
+/* FONTS */
+
+body, button, input, select, textarea {
+  background-color: var(--bg-color);
+  font-family: 'Montserrat', sans-serif; /* Montserrat für alles */
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
 @media (max-height: 780px) and (min-width: 900px) {
     html.dash-page {
         overflow: hidden;
