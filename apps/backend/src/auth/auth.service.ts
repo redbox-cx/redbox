@@ -5,7 +5,6 @@ import { UsersService } from 'src/users/users.service';
 import { LoginDto } from './dto/login-user.dto';
 import * as bcrypt from 'bcryptjs';
 import { RegisterUsersDto } from './dto/register-user.dto';
-import { UserRole, UserStatus } from '@prisma/client';
 import { randomUUID, scrypt, randomBytes, createCipheriv, createDecipheriv, createHash, generateKeyPairSync } from 'crypto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { RecoverPasswordDto } from './dto/recover-password.dto';
@@ -61,7 +60,7 @@ export class AuthService {
         const invite = await this.prismaService.inviteCode.findUnique({
             where: { code: inviteCode }
         });
-        if (!invite || invite.usage <= 0) {
+        if (!invite || !invite.isValid || invite.usage <= 0) {
             throw new UnauthorizedException('Invalid or expired invite code');
         }
 
@@ -139,10 +138,20 @@ export class AuthService {
             throw new UnauthorizedException('Invalid username or password')
         }
 
-        const masterKey = await this.decryptMasterKey(loginDto.password, user);
-        await this.redis.set(`masterkey:${user.id}`, masterKey.toString('hex'), 'EX', 86400);
+        await this.usersService.assertUserCanLogin(user);
 
-        return this.getTokens(user.id, user.username, user.sessionKey);
+        const currentUser = await this.prismaService.user.findUnique({
+            where: { id: user.id }
+        });
+
+        if (!currentUser) {
+            throw new UnauthorizedException('Invalid username or password')
+        }
+
+        const masterKey = await this.decryptMasterKey(loginDto.password, currentUser);
+        await this.redis.set(`masterkey:${currentUser.id}`, masterKey.toString('hex'), 'EX', 86400);
+
+        return this.getTokens(currentUser.id, currentUser.username, currentUser.sessionKey);
     }
 
 
@@ -154,7 +163,7 @@ export class AuthService {
             where: { code: inviteCode }
         });
 
-        if (!invite || invite.usage <= 0) {
+        if (!invite || !invite.isValid || invite.usage <= 0) {
             throw new UnauthorizedException('Invalid or expired invite code');
         }
 
@@ -231,6 +240,16 @@ export class AuthService {
 
 
     async refreshToken(userId: string, keyFromToken: string) {
+        const user = await this.prismaService.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            throw new ForbiddenException('Access Denied (User not found)');
+        }
+
+        await this.usersService.assertUserCanLogin(user);
+
         const newSessionKey = randomUUID();
         const result = await this.prismaService.user.updateMany({
             where: { id: userId, sessionKey: keyFromToken },

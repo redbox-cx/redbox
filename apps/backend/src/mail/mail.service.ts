@@ -1,4 +1,5 @@
 import { Injectable, Logger, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { UserStatus } from '@prisma/client';
 import { PrismaService } from 'src/prisma.service';
 import { simpleParser } from 'mailparser';
 import { IncomingMailDto } from './dto/incoming-mail.dto';
@@ -345,6 +346,9 @@ export class MailService {
 
     const user = await this.prisma.user.findUnique({ where: { username } });
     if (!user) return { status: 'ignored', reason: 'User not found' };
+    if (user.status !== UserStatus.ACTIVE) {
+      return { status: 'ignored', reason: 'User account is not active' };
+    }
 
     const fromMatch = dto.from.match(/<([^>]+)>/);
     const senderEmail = (fromMatch ? fromMatch[1] : dto.from).toLowerCase().trim();

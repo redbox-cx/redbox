@@ -20,12 +20,8 @@ enum UserStatus {
   ACTIVE // default
   BANNED // banned by admin
   LOCKED // account (temp) deactivated
-}
-
-// Accountrolle enum
-enum UserRole {
-  USER // default
-  ADMIN // all perms
+  PENDING // user requested account deletion
+  DELETED // data deleted, user record kept for login feedback
 }
 
 // User-Avatar enum
@@ -37,13 +33,23 @@ enum UserAvatar {
   avatar_mesh_p
 }
 
+enum UserRestrictionType {
+  LOCK
+  BAN
+}
+
+enum AuditActorType {
+  ADMIN
+  USER
+  SYSTEM
+}
+
 model User {
   id          String     @id @default(uuid())
   username    String     @unique @db.VarChar(50)
   password    String     @db.VarChar(100)
   avatar      UserAvatar @default(DEFAULT_AVATAR)
   status      UserStatus @default(ACTIVE) // accountstatus enum
-  role        UserRole   @default(USER) // accountrole enum
   sessionKey  String     @default(uuid())
   createdAt   DateTime   @default(now())
   issuedCodes Int        @default(0) // amount of codes the user made
@@ -54,6 +60,9 @@ model User {
   bins           Bin[]
   inbox          Mail[]
   blockedSenders BlockedSender[]
+  restrictions   UserRestriction[]
+  deletionRequests UserDeletionRequest[]
+  auditLogs      AdminAuditLog[]     @relation("AuditTargetUser")
 
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
@@ -69,10 +78,21 @@ model User {
   privateKeyIv        String @db.VarChar(50)
 }
 
+model AdminUser {
+  id           String     @id @default(uuid())
+  username     String     @unique @db.VarChar(50)
+  passwordHash String     @db.VarChar(100)
+  avatar       UserAvatar @default(DEFAULT_AVATAR)
+  sessionKey   String     @default(uuid())
+  createdRestrictions UserRestriction[] @relation("RestrictionCreatedByAdmin")
+  auditLogs          AdminAuditLog[]    @relation("AuditActorAdmin")
+}
+
 model InviteCode {
   id      String  @id @default(uuid())
   code    String  @unique @db.VarChar(50)
   usage   Int     @default(1)
+  isValid Boolean @default(true)
   userId  String?
   creator User?   @relation("GeneratedBy", fields: [userId], references: [id])
 }
@@ -162,4 +182,52 @@ model MailAttachment {
 
   mailId String
   mail   Mail   @relation(fields: [mailId], references: [id], onDelete: Cascade)
+}
+
+model UserRestriction {
+  id                   String              @id @default(uuid())
+  userId               String
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                 UserRestrictionType
+  reason               String              @db.VarChar(500)
+  isPermanent          Boolean             @default(false)
+  expiresAt            DateTime?
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser?          @relation("RestrictionCreatedByAdmin", fields: [createdByAdminUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime            @default(now())
+  resolvedAt           DateTime?
+
+  @@index([userId, type, resolvedAt])
+}
+
+model UserDeletionRequest {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestedAt   DateTime @default(now())
+  deleteAfterAt DateTime
+  cancelledAt   DateTime?
+  processedAt   DateTime?
+
+  @@index([userId, cancelledAt, processedAt])
+}
+
+model AdminAuditLog {
+  id             String         @id @default(uuid())
+  actorType      AuditActorType @default(ADMIN)
+  adminUserId    String?
+  adminUser      AdminUser?     @relation("AuditActorAdmin", fields: [adminUserId], references: [id], onDelete: SetNull)
+  targetUserId   String?
+  targetUser     User?          @relation("AuditTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  action         String         @db.VarChar(100)
+  previousStatus UserStatus?
+  newStatus      UserStatus?
+  reason         String?        @db.VarChar(500)
+  meta           Json?
+  createdAt      DateTime       @default(now())
+
+  @@index([adminUserId])
+  @@index([targetUserId])
+  @@index([action])
+  @@index([createdAt])
 }

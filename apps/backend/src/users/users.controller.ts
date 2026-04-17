@@ -3,6 +3,7 @@ import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guard/auth.guard';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { GetUserId } from '../auth/decorator/get-user.decorator';
+import { AccountDeletionPasswordDto } from './dto/account-deletion.dto';
 
 
 
@@ -46,6 +47,24 @@ export class UsersController {
         return {
             message: 'Your invite codes',
             result: invites
+        };
+    }
+
+    @Post('/account/delete-request')
+    async requestAccountDeletion(@GetUserId() userId: string, @Body() dto: AccountDeletionPasswordDto) {
+        const result = await this.usersService.requestAccountDeletion(userId, dto.password);
+        return {
+            message: 'Account deletion requested successfully',
+            result,
+        };
+    }
+
+    @Post('/account/cancel-delete-request')
+    async cancelAccountDeletion(@GetUserId() userId: string, @Body() dto: AccountDeletionPasswordDto) {
+        const result = await this.usersService.cancelAccountDeletion(userId, dto.password);
+        return {
+            message: 'Account deletion request cancelled successfully',
+            result,
         };
     }
 }

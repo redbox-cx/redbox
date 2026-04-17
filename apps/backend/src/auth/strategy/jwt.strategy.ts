@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from 'passport-jwt'
+import { UserStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 
 
@@ -26,6 +27,10 @@ export class JwtStrategy extends PassportStrategy(Strategy){
 
         if (!user || user.sessionKey !== payload.sessionKey) {
             throw new UnauthorizedException('Access Denied (Session Expired)')
+        }
+
+        if (user.status !== UserStatus.ACTIVE) {
+            throw new UnauthorizedException('Access Denied (Account inactive)')
         }
         return user;
     }
