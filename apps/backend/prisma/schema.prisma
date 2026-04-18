@@ -4,7 +4,7 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
-// after every change: "npx prisma migrate dev --name description" !!
+// after every change: "pnpx prisma migrate dev --name description" !!
 
 generator client {
   provider = "prisma-client-js"
@@ -20,12 +20,8 @@ enum UserStatus {
   ACTIVE // default
   BANNED // banned by admin
   LOCKED // account (temp) deactivated
-}
-
-// Accountrolle enum
-enum UserRole {
-  USER // default
-  ADMIN // all perms
+  PENDING // user requested account deletion
+  DELETED // data deleted, user record kept for login feedback
 }
 
 // User-Avatar enum
@@ -37,13 +33,23 @@ enum UserAvatar {
   avatar_mesh_p
 }
 
+enum UserRestrictionType {
+  LOCK
+  BAN
+}
+
+enum AuditActorType {
+  ADMIN
+  USER
+  SYSTEM
+}
+
 model User {
   id          String     @id @default(uuid())
   username    String     @unique @db.VarChar(50)
   password    String     @db.VarChar(100)
   avatar      UserAvatar @default(DEFAULT_AVATAR)
   status      UserStatus @default(ACTIVE) // accountstatus enum
-  role        UserRole   @default(USER) // accountrole enum
   sessionKey  String     @default(uuid())
   createdAt   DateTime   @default(now())
   issuedCodes Int        @default(0) // amount of codes the user made
@@ -54,21 +60,39 @@ model User {
   bins           Bin[]
   inbox          Mail[]
   blockedSenders BlockedSender[]
+  restrictions   UserRestriction[]
+  deletionRequests UserDeletionRequest[]
+  auditLogs      AdminAuditLog[]     @relation("AuditTargetUser")
 
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
   masterKeySalt      String? @db.VarChar(50)
 
-  recoveryPhraseHash         String @db.VarChar(100) // bcrypt Hash of the recovery-phrase (25 words)
+  recoveryPhraseHash         String @db.VarChar(100) // bcrypt Hash of the recovery-phrase (24 words)
   recoveryEncryptedMasterKey String @db.Text // MasterKey, encrypted with recovery-phrase
   recoveryMasterKeyIv        String @db.VarChar(50)
   recoveryMasterKeySalt      String @db.VarChar(50)
+
+  publicKey           String @db.Text // not encrypted
+  encryptedPrivateKey String @db.Text // encrypted with AES Masterkey
+  privateKeyIv        String @db.VarChar(50)
+}
+
+model AdminUser {
+  id           String     @id @default(uuid())
+  username     String     @unique @db.VarChar(50)
+  passwordHash String     @db.VarChar(100)
+  avatar       UserAvatar @default(DEFAULT_AVATAR)
+  sessionKey   String     @default(uuid())
+  createdRestrictions UserRestriction[] @relation("RestrictionCreatedByAdmin")
+  auditLogs          AdminAuditLog[]    @relation("AuditActorAdmin")
 }
 
 model InviteCode {
   id      String  @id @default(uuid())
   code    String  @unique @db.VarChar(50)
   usage   Int     @default(1)
+  isValid Boolean @default(true)
   userId  String?
   creator User?   @relation("GeneratedBy", fields: [userId], references: [id])
 }
@@ -121,18 +145,23 @@ model Bin {
 }
 
 model Mail {
-  id         String   @id @default(uuid())
-  subject    String?  @db.VarChar(255)
-  from       String   @db.VarChar(255)
-  to         String   @db.VarChar(255)
-  storageKey String   @unique // name of file in MinIO
-  isRead     Boolean  @default(false)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  createdAt  DateTime @default(now())
+  id          String           @id @default(uuid())
+  subject     String?          @db.VarChar(255)
+  from        String           @db.VarChar(255)
+  to          String           @db.VarChar(255)
+  storageKey  String           @unique // name of file in MinIO
+  contentSize Int              @default(0) // decrypted mail body size in bytes for quota tracking
+  userId      String
+  user        User             @relation(fields: [userId], references: [id])
+  createdAt   DateTime         @default(now())
+  attachments MailAttachment[]
 
+  isRead     Boolean @default(false)
   isArchived Boolean @default(false)
   isSpam     Boolean @default(false)
+
+  encryptedMailKey String @db.Text
+  mailKeyIv        String @db.VarChar(50)
 }
 
 model BlockedSender {
@@ -143,4 +172,63 @@ model BlockedSender {
   createdAt DateTime @default(now())
 
   @@unique([userId, email])
+}
+
+model MailAttachment {
+  id         String @id @default(uuid())
+  filename   String @db.VarChar(255)
+  mimetype   String @db.VarChar(100)
+  size       Int
+  storageKey String @unique // name in MinIO/S3
+
+  mailId String
+  mail   Mail   @relation(fields: [mailId], references: [id], onDelete: Cascade)
+}
+
+model UserRestriction {
+  id                   String              @id @default(uuid())
+  userId               String
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                 UserRestrictionType
+  reason               String              @db.VarChar(500)
+  isPermanent          Boolean             @default(false)
+  expiresAt            DateTime?
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser?          @relation("RestrictionCreatedByAdmin", fields: [createdByAdminUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime            @default(now())
+  resolvedAt           DateTime?
+
+  @@index([userId, type, resolvedAt])
+}
+
+model UserDeletionRequest {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestedAt   DateTime @default(now())
+  deleteAfterAt DateTime
+  cancelledAt   DateTime?
+  processedAt   DateTime?
+
+  @@index([userId, cancelledAt, processedAt])
+}
+
+model AdminAuditLog {
+  id             String         @id @default(uuid())
+  actorType      AuditActorType @default(ADMIN)
+  adminUserId    String?
+  adminUser      AdminUser?     @relation("AuditActorAdmin", fields: [adminUserId], references: [id], onDelete: SetNull)
+  targetUserId   String?
+  targetUser     User?          @relation("AuditTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  action         String         @db.VarChar(100)
+  previousStatus UserStatus?
+  newStatus      UserStatus?
+  reason         String?        @db.VarChar(500)
+  meta           Json?
+  createdAt      DateTime       @default(now())
+
+  @@index([adminUserId])
+  @@index([targetUserId])
+  @@index([action])
+  @@index([createdAt])
 }

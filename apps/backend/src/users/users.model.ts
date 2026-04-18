@@ -1,4 +1,4 @@
-import { $Enums, Prisma, UserAvatar, UserRole, UserStatus } from "@prisma/client";
+import { UserAvatar, UserStatus } from "@prisma/client";
 
 
 export class User {
@@ -7,7 +7,6 @@ export class User {
     password: string;
     avatar: UserAvatar;
     status: UserStatus;
-    role?: UserRole;
     sessionKey?: string;
     createdAt?: Date;
     issuedCodes?: number;
