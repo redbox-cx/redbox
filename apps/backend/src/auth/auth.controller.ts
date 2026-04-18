@@ -5,6 +5,7 @@ import { RegisterUsersDto } from "./dto/register-user.dto";
 import { PreValidateDto } from "./dto/pre-validate.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { RecoverPasswordDto } from "./dto/recover-password.dto";
+import { ReactivateAccountDto } from "./dto/reactivate-account.dto";
 import { AuthGuard } from "@nestjs/passport";
 import { JwtAuthGuard } from "./guard/auth.guard";
 import { GetUserId, GetUser } from "./decorator/get-user.decorator";
@@ -21,7 +22,9 @@ export class AuthController{
     async login(@Body() loginDto: LoginDto) {
         const result = await this.authService.login(loginDto);
         return {
-            message: 'Successfully logged in',
+            message: result?.loginState === 'pending_deletion'
+                ? 'Account is pending deletion'
+                : 'Successfully logged in',
             result
         };
     }
@@ -90,6 +93,15 @@ export class AuthController{
         return {
             message: result.message,
             result
+        };
+    }
+
+    @Post('/account/reactivate')
+    async reactivateAccount(@Body() dto: ReactivateAccountDto) {
+        const result = await this.authService.reactivateAccount(dto.reactivationToken);
+        return {
+            message: 'Account reactivated successfully',
+            result,
         };
     }
 }

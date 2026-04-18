@@ -58,13 +58,4 @@ export class UsersController {
             result,
         };
     }
-
-    @Post('/account/cancel-delete-request')
-    async cancelAccountDeletion(@GetUserId() userId: string, @Body() dto: AccountDeletionPasswordDto) {
-        const result = await this.usersService.cancelAccountDeletion(userId, dto.password);
-        return {
-            message: 'Account deletion request cancelled successfully',
-            result,
-        };
-    }
 }

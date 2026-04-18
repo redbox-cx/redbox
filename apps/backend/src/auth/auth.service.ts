@@ -12,9 +12,18 @@ import { promisify } from 'util';
 import { Redis } from 'ioredis';
 import {InjectRedis} from '@nestjs-modules/ioredis';
 import * as bip39 from 'bip39';
+import { UserStatus } from '@prisma/client';
 
 
 const scryptAsync = promisify(scrypt);
+
+type ReactivationTokenPayload = {
+    sub: string;
+    username: string;
+    sessionKey: string;
+    deletionRequestId: string;
+    purpose: 'account_reactivation';
+};
 
 
 @Injectable()
@@ -94,6 +103,41 @@ export class AuthService {
         return await bcrypt.compare(sha256, hash);
     }
 
+    private getReactivationSecret() {
+        return process.env.JWT_REACTIVATION_SECRET || process.env.JWT_ACCESS_SECRET!;
+    }
+
+    private getReactivationExpiry() {
+        return (process.env.EXPIRES_IN_REACTIVATION || '15m') as any;
+    }
+
+    private async getReactivationToken(
+        userId: string,
+        username: string,
+        sessionKey: string,
+        deletionRequestId: string,
+    ) {
+        return this.jwtService.signAsync(
+            {
+                sub: userId,
+                username,
+                sessionKey,
+                deletionRequestId,
+                purpose: 'account_reactivation',
+            } satisfies ReactivationTokenPayload,
+            {
+                secret: this.getReactivationSecret(),
+                expiresIn: this.getReactivationExpiry(),
+            },
+        );
+    }
+
+    private async verifyReactivationToken(token: string) {
+        return this.jwtService.verifyAsync<ReactivationTokenPayload>(token, {
+            secret: this.getReactivationSecret(),
+        });
+    }
+
 
     async getTokens(userId: string, username: string, sessionKey: string) {
 
@@ -124,34 +168,56 @@ export class AuthService {
         const {username,password} = loginDto;
 
 
-        const user =await this.prismaService.user.findUnique({
+        const user = await this.prismaService.user.findUnique({
             where: {username}
-        })
+        });
 
         if(!user){
-            throw new UnauthorizedException('Invalid username or password')
+            throw new UnauthorizedException('Invalid username or password');
         }
 
-        const isPasswordValid = await bcrypt.compare(password,user.password)
+        const isPasswordValid = await bcrypt.compare(password,user.password);
 
         if(!isPasswordValid){
-            throw new UnauthorizedException('Invalid username or password')
+            throw new UnauthorizedException('Invalid username or password');
         }
 
-        await this.usersService.assertUserCanLogin(user);
+        const pendingDeletionRequest = await this.usersService.preparePendingDeletionLogin(user.id);
+        if (pendingDeletionRequest) {
+            return {
+                loginState: 'pending_deletion',
+                deleteAfterAt: pendingDeletionRequest.deleteAfterAt.toISOString(),
+                reactivationToken: await this.getReactivationToken(
+                    user.id,
+                    user.username,
+                    user.sessionKey,
+                    pendingDeletionRequest.id,
+                ),
+            };
+        }
 
         const currentUser = await this.prismaService.user.findUnique({
             where: { id: user.id }
         });
 
         if (!currentUser) {
-            throw new UnauthorizedException('Invalid username or password')
+            throw new UnauthorizedException('Invalid username or password');
         }
 
-        const masterKey = await this.decryptMasterKey(loginDto.password, currentUser);
-        await this.redis.set(`masterkey:${currentUser.id}`, masterKey.toString('hex'), 'EX', 86400);
+        await this.usersService.assertUserCanLogin(currentUser);
 
-        return this.getTokens(currentUser.id, currentUser.username, currentUser.sessionKey);
+        const authenticatedUser = await this.prismaService.user.findUnique({
+            where: { id: user.id }
+        });
+
+        if (!authenticatedUser) {
+            throw new UnauthorizedException('Invalid username or password');
+        }
+
+        const masterKey = await this.decryptMasterKey(loginDto.password, authenticatedUser);
+        await this.redis.set(`masterkey:${authenticatedUser.id}`, masterKey.toString('hex'), 'EX', 86400);
+
+        return this.getTokens(authenticatedUser.id, authenticatedUser.username, authenticatedUser.sessionKey);
     }
 
 
@@ -341,5 +407,59 @@ export class AuthService {
         });
 
         return { message: 'Password has been successfully reset.' };
+    }
+
+    async reactivateAccount(reactivationToken: string) {
+        let payload: ReactivationTokenPayload;
+
+        try {
+            payload = await this.verifyReactivationToken(reactivationToken);
+        } catch {
+            throw new UnauthorizedException('Invalid or expired reactivation token');
+        }
+
+        if (payload.purpose !== 'account_reactivation') {
+            throw new UnauthorizedException('Invalid reactivation token');
+        }
+
+        const user = await this.prismaService.user.findUnique({
+            where: { id: payload.sub },
+            select: {
+                id: true,
+                username: true,
+                sessionKey: true,
+                status: true,
+            },
+        });
+
+        if (!user || user.username !== payload.username || user.sessionKey !== payload.sessionKey) {
+            throw new UnauthorizedException('Invalid or expired reactivation token');
+        }
+
+        if (user.status === UserStatus.DELETED) {
+            throw new ForbiddenException('This account has already been deleted.');
+        }
+
+        if (user.status === UserStatus.ACTIVE) {
+            return {
+                success: true,
+                status: 'active',
+                requiresLogin: true,
+            };
+        }
+
+        if (user.status !== UserStatus.PENDING) {
+            throw new BadRequestException('This account is not pending deletion.');
+        }
+
+        const result = await this.usersService.reactivatePendingAccount(
+            user.id,
+            payload.deletionRequestId,
+        );
+
+        return {
+            ...result,
+            requiresLogin: true,
+        };
     }
 }

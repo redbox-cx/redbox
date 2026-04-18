@@ -205,12 +205,42 @@ export class UsersService {
     };
   }
 
-  async cancelAccountDeletion(userId: string, password: string) {
+  async preparePendingDeletionLogin(userId: string) {
     const user = await this.prismaService.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
-        password: true,
+        status: true,
+      },
+    });
+
+    if (!user || user.status !== UserStatus.PENDING) {
+      return null;
+    }
+
+    const activeRequest = await this.getActiveDeletionRequest(userId);
+    if (activeRequest && activeRequest.deleteAfterAt <= new Date()) {
+      await this.finalizePendingDeletion(userId, activeRequest.id);
+      throw new ForbiddenException('This account has been deleted.');
+    }
+
+    if (!activeRequest) {
+      await this.reactivateUser(user.id, {
+        actorType: AuditActorType.SYSTEM,
+        reason: 'Pending deletion request missing during login check',
+        action: 'user_status_normalized',
+      });
+      return null;
+    }
+
+    return activeRequest;
+  }
+
+  async reactivatePendingAccount(userId: string, deletionRequestId: string) {
+    const user = await this.prismaService.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
         status: true,
       },
     });
@@ -219,40 +249,35 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const passwordMatches = await bcrypt.compare(password, user.password);
-    if (!passwordMatches) {
-      throw new UnauthorizedException('Invalid password');
+    if (user.status === UserStatus.DELETED) {
+      throw new BadRequestException('This account has already been deleted');
     }
 
-    const activeRequest = await this.getActiveDeletionRequest(userId);
-    if (!activeRequest) {
+    if (user.status === UserStatus.ACTIVE) {
+      return {
+        success: true,
+        status: 'active',
+      };
+    }
+
+    if (user.status !== UserStatus.PENDING) {
       throw new BadRequestException('No active deletion request found');
     }
 
-    await this.prismaService.$transaction(async (prisma) => {
-      await prisma.userDeletionRequest.update({
-        where: { id: activeRequest.id },
-        data: { cancelledAt: new Date() },
-      });
+    const activeRequest = await this.getActiveDeletionRequest(userId);
+    if (!activeRequest || activeRequest.id !== deletionRequestId) {
+      throw new BadRequestException('No active deletion request found');
+    }
 
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          status: UserStatus.ACTIVE,
-          sessionKey: randomUUID(),
-        },
-      });
+    if (activeRequest.deleteAfterAt <= new Date()) {
+      await this.finalizePendingDeletion(userId, activeRequest.id);
+      throw new ForbiddenException('This account has been deleted.');
+    }
 
-      await this.createAuditLog(prisma, {
-        actorType: AuditActorType.USER,
-        targetUserId: userId,
-        action: 'user_delete_cancelled',
-        previousStatus: user.status,
-        newStatus: UserStatus.ACTIVE,
-      });
+    await this.reactivateUser(userId, {
+      actorType: AuditActorType.USER,
+      action: 'user_delete_cancelled',
     });
-
-    await this.redis.del(`masterkey:${userId}`);
 
     return {
       success: true,
@@ -274,23 +299,13 @@ export class UsersService {
     }
 
     if (user.status === UserStatus.PENDING) {
-      const request = await this.getActiveDeletionRequest(user.id);
-      if (request && request.deleteAfterAt <= new Date()) {
-        await this.finalizePendingDeletion(user.id, request.id);
-        throw new ForbiddenException('This account has been deleted.');
-      }
-
-      if (!request) {
-        await this.reactivateUser(user.id, {
-          actorType: AuditActorType.SYSTEM,
-          reason: 'Pending deletion request missing during login check',
-          action: 'user_status_normalized',
-        });
+      const pendingRequest = await this.preparePendingDeletionLogin(user.id);
+      if (!pendingRequest) {
         return;
       }
 
       throw new ForbiddenException(
-        `This account is pending deletion and will be deleted on ${request.deleteAfterAt.toISOString()}.`,
+        `This account is pending deletion and will be deleted on ${pendingRequest.deleteAfterAt.toISOString()}.`,
       );
     }
 
