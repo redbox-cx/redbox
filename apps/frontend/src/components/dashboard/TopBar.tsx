@@ -6,8 +6,8 @@ import { getAvatarSrc } from "../../config/avatars";
 
 const navLinks = [
     { label: "Dashboard", to: "/dashboard" },
-    { label: "SecureSphere", to: "/dashboard/securesphere" },
-    { label: "Mail", to: "/dashboard/mail" },
+    { label: "SecureSphere", to: "/securesphere" },
+    { label: "Mail", to: "/mail" },
     { label: "Upload", to: "/upload" },
     { label: "Shortner", to: "/shortner" },
     { label: "Bin", to: "/bin" },

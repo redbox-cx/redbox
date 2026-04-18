@@ -17,6 +17,7 @@ import { Bin } from "../pages/Bin";
 import { BinView } from "../pages/BinView";
 import { Settings } from "../pages/Settings";
 import { MailPage } from "../pages/MailPage";
+import { SecureSphere } from "../pages/SecureSphere";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -49,7 +50,8 @@ export function AppRoutes() {
                 <Route path="/shortner" element={<Shortner />} />
                 <Route path="/bin" element={<Bin />} />
                 <Route path="/user/settings" element={<Settings />} />
-                <Route path="/dashboard/mail" element={<MailPage />} />
+                <Route path="/mail" element={<MailPage />} />
+                <Route path="/securesphere" element={<SecureSphere />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
