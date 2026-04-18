@@ -14,6 +14,28 @@ export function Recover() {
 
     const navigate = useNavigate();
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const text = ev.target?.result as string;
+            const extracted: string[] = [];
+            for (const line of text.split('\n')) {
+                const match = line.match(/^\s*\d+\.\s+(\S+)/);
+                if (match) extracted.push(match[1]);
+            }
+            if (extracted.length === 24) {
+                setWordInputs(extracted);
+                setError('');
+            } else {
+                setError(`Invalid file: found ${extracted.length} words, expected 24.`);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+
     const setWord = (i: number, value: string) => {
         setWordInputs((prev) => {
             const next = [...prev];
@@ -105,7 +127,19 @@ export function Recover() {
                             </div>
                         </div>
 
-                        <p className="recover-phrase-label">Enter your 24-word recovery phrase:</p>
+                        <div className="recover-phrase-header">
+                            <p className="recover-phrase-label">Enter your 24-word recovery phrase:</p>
+                            <label className="phrase-btn-outline recover-upload-btn">
+                                <i className="bi bi-upload" /> Upload .txt
+                                <input
+                                    type="file"
+                                    accept=".txt"
+                                    style={{ display: 'none' }}
+                                    onChange={handleFileUpload}
+                                    disabled={isLoading}
+                                />
+                            </label>
+                        </div>
 
                         <div className="phrase-grid">
                             {wordInputs.map((word, i) => (

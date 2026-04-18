@@ -3806,11 +3806,28 @@ html.dash-page {
     margin: 8px 0 0;
 }
 
+.recover-phrase-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.recover-upload-btn {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 .recover-phrase-label {
     font-size: 0.82rem;
     font-weight: 600;
     color: var(--color-text);
-    margin: 0 0 4px;
+    margin: 0;
 }
 
 @media (max-width: 600px) {
