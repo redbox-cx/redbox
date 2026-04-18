@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { MailService } from "../services/MailService";
 import { TopBar } from "../components/dashboard/TopBar";
 import { LinksWidget } from "../components/dashboard/LinksWidget";
 import { StorageWidget } from "../components/dashboard/StorageWidget";
@@ -8,12 +9,17 @@ import { BinsWidget } from "../components/dashboard/BinsWidget";
 
 export function DashBoard() {
     const { user } = useAuth();
+    const [unreadMail, setUnreadMail] = useState(0);
 
     useEffect(() => {
         document.documentElement.classList.add('dash-page');
-        return () => {
-            document.documentElement.classList.remove('dash-page');
-        };
+        return () => { document.documentElement.classList.remove('dash-page'); };
+    }, []);
+
+    useEffect(() => {
+        MailService.getAll(100, 0)
+            .then(r => setUnreadMail(r.mails.filter(m => !m.isRead).length))
+            .catch(() => {});
     }, []);
 
     return (
@@ -29,7 +35,7 @@ export function DashBoard() {
                     </div>
                     <div className="dash-right-col">
                         <div className="mail-row">
-                            <NotificationWidget title="Mail Notifications" icon="bi bi-envelope" count={0} />
+                            <NotificationWidget title="Mail Notifications" icon="bi bi-envelope" count={unreadMail} />
                         </div>
                         <div className="dash-bottom-row">
                             <LinksWidget />

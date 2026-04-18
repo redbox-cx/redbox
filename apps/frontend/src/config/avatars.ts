@@ -1,4 +1,4 @@
-const modules = import.meta.glob('../assets/avatars/*', { eager: true, as: 'url' }) as Record<string, string>;
+const modules = import.meta.glob('../assets/avatars/*', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 
 export interface AvatarEntry {
     key: string;   // enum value

@@ -16,6 +16,7 @@ import { ShortRedirect } from "../pages/ShortRedirect";
 import { Bin } from "../pages/Bin";
 import { BinView } from "../pages/BinView";
 import { Settings } from "../pages/Settings";
+import { MailPage } from "../pages/MailPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -48,6 +49,7 @@ export function AppRoutes() {
                 <Route path="/shortner" element={<Shortner />} />
                 <Route path="/bin" element={<Bin />} />
                 <Route path="/user/settings" element={<Settings />} />
+                <Route path="/dashboard/mail" element={<MailPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
