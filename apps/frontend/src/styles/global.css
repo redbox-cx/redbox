@@ -24,10 +24,12 @@ html.dash-page,
 html.dash-page body {
     overflow: hidden;
 }
-html.settings-page,
-html.settings-page body {
+html.settings-page {
     overflow-y: auto !important;
     overflow-x: hidden;
+}
+html.settings-page body {
+    overflow: visible;
 }
 html.settings-page .dash-layout {
     position: relative;
