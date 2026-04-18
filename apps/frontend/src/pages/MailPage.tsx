@@ -94,6 +94,7 @@ export function MailPage() {
     const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
     const [copiedEmail, setCopiedEmail] = useState(false);
     const [gearRot, setGearRot] = useState(0);
+    const [mailStorageMb, setMailStorageMb] = useState(0);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const sortRef = useRef<HTMLDivElement>(null);
 
@@ -123,6 +124,12 @@ export function MailPage() {
     };
 
     useEffect(() => { loadPage(page, sort, folder); }, [page, sort, folder]);
+
+    useEffect(() => {
+        MailService.getStorage()
+            .then(s => setMailStorageMb(s.usedMb))
+            .catch(() => {});
+    }, []);
 
     const displayed = useMemo(() => {
         let list = mails;
@@ -395,6 +402,16 @@ export function MailPage() {
                                 <button className="mc-page-btn" onClick={() => changePage(page + 1)} disabled={page >= totalPages - 1}>
                                     <i className="bi bi-chevron-right" />
                                 </button>
+                            </div>
+
+                            <div className="upload-quota">
+                                <div className="upload-quota-labels">
+                                    <span>{mailStorageMb} MB used</span>
+                                    <span>500 MB</span>
+                                </div>
+                                <div className="upload-quota-track">
+                                    <div className="upload-quota-fill" style={{ width: `${Math.min((mailStorageMb / 500) * 100, 100)}%` }} />
+                                </div>
                             </div>
 
                             <div className="mc-user-row">

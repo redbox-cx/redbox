@@ -56,4 +56,9 @@ export const MailService = {
     async bulkMove(mailIds: string[], folder: MailFolder): Promise<void> {
         await apiClient.post('/mail/bulk/move', { mailIds, folder });
     },
+
+    async getStorage(): Promise<{ usedMb: number; maxMb: number }> {
+        const { data } = await apiClient.get('/mail/storage');
+        return data.result;
+    },
 };

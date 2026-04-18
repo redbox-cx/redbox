@@ -30,6 +30,12 @@ export function Settings() {
     const [pwSuccess, setPwSuccess] = useState('');
     const [pwError, setPwError] = useState('');
 
+    // Delete account
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [deletePassword, setDeletePassword] = useState('');
+    const [deleteLoading, setDeleteLoading] = useState(false);
+    const [deleteError, setDeleteError] = useState('');
+
     useEffect(() => {
         document.documentElement.classList.add('dash-page', 'settings-page');
         return () => { document.documentElement.classList.remove('dash-page', 'settings-page'); };
@@ -72,6 +78,24 @@ export function Settings() {
     };
 
     const atInviteLimit = invites.length >= 2;
+
+    const openDeleteModal = () => { setDeletePassword(''); setDeleteError(''); setDeleteModalOpen(true); };
+    const closeDeleteModal = () => { setDeleteModalOpen(false); setDeletePassword(''); setDeleteError(''); };
+
+    const handleDeleteAccount = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setDeleteError('');
+        setDeleteLoading(true);
+        try {
+            await UserService.deleteAccount(deletePassword);
+            logout();
+        } catch (err: any) {
+            const msg = err.response?.data?.message;
+            setDeleteError(Array.isArray(msg) ? msg[0] : msg || 'Incorrect password.');
+        } finally {
+            setDeleteLoading(false);
+        }
+    };
 
     const handleAvatarSave = async () => {
         if (!selectedAvatar || selectedAvatar === user?.avatar) return;
@@ -278,8 +302,59 @@ export function Settings() {
                         </button>
                     </div>
 
+                    <div className="glass-panel settings-card">
+                        <h2 className="settings-section-title">
+                            <i className="bi bi-trash3" style={{ color: 'var(--color-primary)' }} /> Delete Account
+                        </h2>
+                        <p className="settings-profile-since" style={{ margin: 0 }}>
+                            This will schedule your account for permanent deletion after a 7-day grace period. All your files, mails, links, and bins will be removed.
+                        </p>
+                        <button className="settings-delete-btn" onClick={openDeleteModal}>
+                            <i className="bi bi-trash3" /> Delete my account
+                        </button>
+                    </div>
+
                 </div>
             </main>
+
+            {deleteModalOpen && (
+                <div className="settings-modal-overlay" onClick={closeDeleteModal}>
+                    <div className="settings-modal" onClick={e => e.stopPropagation()}>
+                        <div className="settings-modal-icon">
+                            <i className="bi bi-exclamation-triangle-fill" />
+                        </div>
+                        <h2 className="settings-modal-title">Delete Account</h2>
+                        <p className="settings-modal-desc">
+                            Your account will be <strong>permanently deleted in 7 days</strong>. This includes all your files, mails, links, and bins. This cannot be undone.
+                        </p>
+                        <form onSubmit={handleDeleteAccount} className="settings-modal-form">
+                            <div className="shr-input-wrap">
+                                <i className="bi bi-lock shr-input-icon" />
+                                <input
+                                    className="shr-input"
+                                    type="password"
+                                    placeholder="Enter your password to confirm"
+                                    value={deletePassword}
+                                    onChange={e => setDeletePassword(e.target.value)}
+                                    disabled={deleteLoading}
+                                    required
+                                    autoFocus
+                                />
+                            </div>
+                            {deleteError && <p className="settings-error"><i className="bi bi-exclamation-triangle" /> {deleteError}</p>}
+                            <div className="settings-modal-actions">
+                                <button type="button" className="settings-modal-cancel" onClick={closeDeleteModal} disabled={deleteLoading}>
+                                    Cancel
+                                </button>
+                                <button type="submit" className="settings-modal-confirm" disabled={deleteLoading || !deletePassword}>
+                                    <i className="bi bi-trash3" />
+                                    {deleteLoading ? 'Deleting…' : 'Delete Account'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

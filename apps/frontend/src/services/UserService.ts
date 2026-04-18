@@ -36,4 +36,8 @@ export const UserService = {
         const { data } = await apiClient.post('/user/invites');
         return data.result;
     },
+
+    async deleteAccount(password: string): Promise<void> {
+        await apiClient.post('/user/account/delete-request', { password });
+    },
 };

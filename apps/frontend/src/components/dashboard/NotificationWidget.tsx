@@ -4,9 +4,10 @@ interface Props {
     title: string;
     icon: string;
     count: number;
+    storageMb?: number;
 }
 
-export function NotificationWidget({ title, icon, count }: Props) {
+export function NotificationWidget({ title, icon, count, storageMb }: Props) {
     const [isSlidDown, setIsSlidDown] = useState(false);
 
     return (
@@ -15,7 +16,12 @@ export function NotificationWidget({ title, icon, count }: Props) {
             <div className="glass-panel notif-box">
                 <div className="widget-header">
                     <h3>{title === "Mail Notifications" ? "Inbox" : "Notifications"}</h3>
-                    <span className={`red-badge ${count === 0 ? 'zero' : ''}`}>{count}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {storageMb !== undefined && (
+                            <span className="notif-storage-label">{storageMb} MB / 500 MB</span>
+                        )}
+                        <span className={`red-badge ${count === 0 ? 'zero' : ''}`}>{count}</span>
+                    </div>
                 </div>
                 <div className="content-window">
                     <div className={`content-list ${!isSlidDown ? 'is-blurred' : ''}`}>

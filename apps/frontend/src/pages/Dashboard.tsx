@@ -10,6 +10,7 @@ import { BinsWidget } from "../components/dashboard/BinsWidget";
 export function DashBoard() {
     const { user } = useAuth();
     const [unreadMail, setUnreadMail] = useState(0);
+    const [mailStorageMb, setMailStorageMb] = useState(0);
 
     useEffect(() => {
         document.documentElement.classList.add('dash-page');
@@ -19,6 +20,9 @@ export function DashBoard() {
     useEffect(() => {
         MailService.getAll(100, 0)
             .then(r => setUnreadMail(r.mails.filter(m => !m.isRead).length))
+            .catch(() => {});
+        MailService.getStorage()
+            .then(s => setMailStorageMb(s.usedMb))
             .catch(() => {});
     }, []);
 
@@ -35,7 +39,8 @@ export function DashBoard() {
                     </div>
                     <div className="dash-right-col">
                         <div className="mail-row">
-                            <NotificationWidget title="Mail Notifications" icon="bi bi-envelope" count={unreadMail} />
+                            <NotificationWidget title="Mail Notifications" icon="bi bi-envelope" count={unreadMail} storageMb={mailStorageMb} />
+
                         </div>
                         <div className="dash-bottom-row">
                             <LinksWidget />
