@@ -24,6 +24,21 @@ html.dash-page,
 html.dash-page body {
     overflow: hidden;
 }
+html.settings-page,
+html.settings-page body {
+    overflow-y: auto !important;
+    overflow-x: hidden;
+}
+html.settings-page .dash-layout {
+    position: relative;
+    inset: auto;
+    overflow: visible;
+    min-height: 100vh;
+}
+html.settings-page .dash-top-nav {
+    position: sticky;
+    top: 0;
+}
 
 @media (max-height: 780px) and (min-width: 900px) {
     html.dash-page {
@@ -2035,6 +2050,11 @@ html.dash-page {
 .copy-icon-btn:hover {
     color: var(--color-primary);
     background: #f1f5f9;
+}
+
+.invite-spent .link-res {
+    text-decoration: line-through;
+    color: #94a3b8;
 }
 
 .copy-icon-btn.copied {
