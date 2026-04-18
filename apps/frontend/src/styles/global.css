@@ -27,15 +27,23 @@ html.dash-page body {
 html.settings-page {
     overflow-y: auto !important;
     overflow-x: hidden;
+    background: var(--dash-gradient);
+    background-attachment: fixed;
 }
 html.settings-page body {
     overflow: visible;
+    background: transparent;
 }
 html.settings-page .dash-layout {
     position: relative;
     inset: auto;
-    overflow: visible;
-    min-height: 100vh;
+    overflow: hidden;
+}
+html.settings-page .settings-container {
+    flex: none;
+}
+html.settings-page .settings-card {
+    height: auto;
 }
 html.settings-page .dash-top-nav {
     position: sticky;
