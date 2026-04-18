@@ -14,6 +14,7 @@ import { Redis } from 'ioredis';
 export class MailService {
 
   private readonly logger = new Logger(MailService.name);
+  private readonly MAX_MAIL_QUOTA = 500 * 1024 * 1024; // 500MB
   private readonly s3: S3Client;
   private readonly bucket = process.env.S3_BUCKET_MAILS || 'redbox-mails';
 
@@ -30,6 +31,24 @@ export class MailService {
       },
       forcePathStyle: true,
     });
+  }
+
+  private async getUserMailStorageUsed(userId: string) {
+    const [mailAggregation, attachmentAggregation] = await Promise.all([
+      this.prisma.mail.aggregate({
+        where: { userId },
+        _sum: { contentSize: true },
+      }),
+      this.prisma.mailAttachment.aggregate({
+        where: { mail: { userId } },
+        _sum: { size: true },
+      }),
+    ]);
+
+    return (
+      Number(mailAggregation._sum.contentSize ?? 0) +
+      Number(attachmentAggregation._sum.size ?? 0)
+    );
   }
 
   async getUserMails(
@@ -71,25 +90,29 @@ export class MailService {
     }
 
     try {
-      const rawMails = await this.prisma.mail.findMany({
-        where: whereCondition,
-        orderBy,
-        take: limit,
-        skip: offset,
-        select: {
-          id: true,
-          subject: true,
-          from: true,
-          to: true,
-          isRead: true,
-          isArchived: true,
-          isSpam: true,
-          createdAt: true,
-          _count: {
-            select: { attachments: true}
+      const [rawMails, totalCount, totalUsed] = await Promise.all([
+        this.prisma.mail.findMany({
+          where: whereCondition,
+          orderBy,
+          take: limit,
+          skip: offset,
+          select: {
+            id: true,
+            subject: true,
+            from: true,
+            to: true,
+            isRead: true,
+            isArchived: true,
+            isSpam: true,
+            createdAt: true,
+            _count: {
+              select: { attachments: true}
+            }
           }
-        }
-      });
+        }),
+        this.prisma.mail.count({ where: whereCondition }),
+        this.getUserMailStorageUsed(userId),
+      ]);
 
       const mails = rawMails.map(mail => {
         const { _count, ...rest } = mail;
@@ -99,10 +122,15 @@ export class MailService {
           hasAttachments: _count.attachments > 0       // true / false
         };
       });
-
-      const totalCount = await this.prisma.mail.count({ where: whereCondition });
       
-      return { mails, totalCount, folder, search };
+      return {
+        mails,
+        totalCount,
+        folder,
+        search,
+        totalUsed,
+        quotaLimit: this.MAX_MAIL_QUOTA,
+      };
     } catch (error) {
       this.logger.error(`Error fetching mails for user ${userId}:`, error);
       throw new InternalServerErrorException('Could not fetch emails');
@@ -362,6 +390,36 @@ export class MailService {
 
     const parsed = await simpleParser(dto.raw);
     const mailContent = parsed.html || parsed.textAsHtml || parsed.text || '(No content)';
+    const contentSize = Buffer.byteLength(mailContent, 'utf8');
+
+    interface PreparedAttachment {
+      content: Buffer;
+      filename: string;
+      mimetype: string;
+      size: number;
+      storageKey: string;
+    }
+
+    const preparedAttachments: PreparedAttachment[] = (parsed.attachments ?? []).map(attachment => ({
+      content: attachment.content,
+      filename: attachment.filename || 'unknown_file',
+      mimetype: attachment.contentType || 'application/octet-stream',
+      size: attachment.size || attachment.content.length,
+      storageKey: `mail_att_${uuidv4()}.bin`,
+    }));
+
+    const incomingMailSize = preparedAttachments.reduce(
+      (total, attachment) => total + attachment.size,
+      contentSize
+    );
+    const currentUsage = await this.getUserMailStorageUsed(user.id);
+    if (currentUsage + incomingMailSize > this.MAX_MAIL_QUOTA) {
+      this.logger.warn(
+        `Ignored email for user '${username}' because mailbox quota would be exceeded`,
+      );
+      return { status: 'ignored', reason: 'Mailbox quota exceeded' };
+    }
+
     const storageKey = `mail_${uuidv4()}.bin`;
 
     const mailKey = randomBytes(32);
@@ -386,25 +444,23 @@ export class MailService {
     }
     const attachmentData: AttachmentData[] = [];
     
-    if (parsed.attachments && parsed.attachments.length > 0) {
-      for (const attachment of parsed.attachments) {
-        const attachmentStorageKey = `mail_att_${uuidv4()}.bin`;
-        
+    if (preparedAttachments.length > 0) {
+      for (const attachment of preparedAttachments) {
         const attCipher = createCipheriv('aes-256-cbc', mailKey, mailIv);
         const encryptedAtt = Buffer.concat([attCipher.update(attachment.content), attCipher.final()]);
 
         await this.s3.send(new PutObjectCommand({
           Bucket: this.bucket,
-          Key: attachmentStorageKey,
+          Key: attachment.storageKey,
           Body: encryptedAtt,
           ContentType: 'application/octet-stream',
         }));
 
         attachmentData.push({
-          filename: attachment.filename || 'unknown_file',
-          mimetype: attachment.contentType || 'application/octet-stream',
-          size: attachment.size || encryptedAtt.length,
-          storageKey: attachmentStorageKey
+          filename: attachment.filename,
+          mimetype: attachment.mimetype,
+          size: attachment.size,
+          storageKey: attachment.storageKey
         });
       }
     }
@@ -420,6 +476,7 @@ export class MailService {
         userId: user.id,
         encryptedMailKey: encryptedMailKey,
         mailKeyIv: mailIv.toString('hex'),
+        contentSize,
         
         attachments: {
           create: attachmentData

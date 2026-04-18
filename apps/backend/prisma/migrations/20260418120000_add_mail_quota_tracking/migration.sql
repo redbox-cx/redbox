@@ -1,0 +1,2 @@
+ALTER TABLE `Mail`
+    ADD COLUMN `contentSize` INTEGER NOT NULL DEFAULT 0;

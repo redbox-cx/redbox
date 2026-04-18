@@ -150,6 +150,7 @@ model Mail {
   from        String           @db.VarChar(255)
   to          String           @db.VarChar(255)
   storageKey  String           @unique // name of file in MinIO
+  contentSize Int              @default(0) // decrypted mail body size in bytes for quota tracking
   userId      String
   user        User             @relation(fields: [userId], references: [id])
   createdAt   DateTime         @default(now())
