@@ -27,6 +27,18 @@ export class BlockSenderDto {
   email: string;
 }
 
+export class BulkUnblockSenderDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(100, { message: "You can't unblock more than 100 senders at once" })
+  @IsEmail({}, { each: true })
+  @MaxLength(254, {
+    each: true,
+    message: "Email-adress can't be longer than 254 characters",
+  })
+  emails: string[];
+}
+
 export class MoveMailDto {
   @IsString()
   @IsNotEmpty()

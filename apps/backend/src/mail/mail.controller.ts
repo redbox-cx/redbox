@@ -6,7 +6,15 @@ import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { TransformInterceptor } from 'src/common/interceptors/transform.interceptor';
 import { timingSafeEqual } from 'crypto';
-import { BulkMailDto, MarkReadDto, BulkMarkReadDto, BlockSenderDto, MoveMailDto, BulkMoveMailDto } from './dto/mail-actions.dto';
+import {
+  BulkMailDto,
+  MarkReadDto,
+  BulkMarkReadDto,
+  BlockSenderDto,
+  MoveMailDto,
+  BulkMoveMailDto,
+  BulkUnblockSenderDto,
+} from './dto/mail-actions.dto';
 
 @Controller('mail')
 @UseInterceptors(TransformInterceptor)
@@ -43,6 +51,13 @@ export class MailController {
     return { message: 'Mails fetched successfully', result: data };
   }
 
+  @Get('blocked-senders')
+  @UseGuards(JwtAuthGuard)
+  async listBlockedSenders(@GetUserId() userId: string) {
+    const result = await this.mailService.getBlockedSenders(userId);
+    return { message: 'Blocked senders fetched successfully', result };
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   async getSingleMail(
@@ -75,6 +90,13 @@ export class MailController {
   }
 
   // --- SINGLE ACTIONS ---
+
+  @Delete('block-sender')
+  @UseGuards(JwtAuthGuard)
+  async unblockSender(@GetUserId() userId: string, @Body() dto: BlockSenderDto) {
+    const result = await this.mailService.unblockSender(userId, dto.email);
+    return { message: 'Sender unblocked successfully', result };
+  }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
@@ -127,6 +149,13 @@ export class MailController {
   async blockSender(@GetUserId() userId: string, @Body() dto: BlockSenderDto) {
     const result = await this.mailService.blockSender(userId, dto.email);
     return { message: 'Sender blocked successfully', result };
+  }
+
+  @Post('bulk/unblock-sender')
+  @UseGuards(JwtAuthGuard)
+  async bulkUnblockSenders(@GetUserId() userId: string, @Body() dto: BulkUnblockSenderDto) {
+    const result = await this.mailService.bulkUnblockSenders(userId, dto.emails);
+    return { message: 'Blocked senders unblocked successfully', result };
   }
 
 

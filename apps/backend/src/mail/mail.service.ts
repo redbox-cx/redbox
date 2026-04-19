@@ -366,6 +366,55 @@ export class MailService {
     return { success: true, blockedEmail: email };
   }
 
+  async getBlockedSenders(userId: string) {
+    const blockedSenders = await this.prisma.blockedSender.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        email: true,
+        createdAt: true,
+      },
+    });
+
+    return {
+      blockedSenders,
+      totalCount: blockedSenders.length,
+    };
+  }
+
+  async unblockSender(userId: string, emailToUnblock: string) {
+    const email = emailToUnblock.toLowerCase().trim();
+    const result = await this.prisma.blockedSender.deleteMany({
+      where: { userId, email },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundException('Blocked sender not found');
+    }
+
+    return {
+      success: true,
+      unblockedEmail: email,
+    };
+  }
+
+  async bulkUnblockSenders(userId: string, emailsToUnblock: string[]) {
+    const emails = [...new Set(emailsToUnblock.map((email) => email.toLowerCase().trim()))];
+    const result = await this.prisma.blockedSender.deleteMany({
+      where: {
+        userId,
+        email: { in: emails },
+      },
+    });
+
+    return {
+      success: true,
+      requestedCount: emails.length,
+      unblockedCount: result.count,
+    };
+  }
+
   // --- INCOMING MAIL ---
   async processIncomingMail(dto: IncomingMailDto) {
     const emailMatch = dto.to.match(/<([^>]+)>/);
