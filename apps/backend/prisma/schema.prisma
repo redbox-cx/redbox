@@ -278,6 +278,7 @@ model ContentReport {
   binId                String?
   bin                  Bin?                @relation("ReportedContentBin", fields: [binId], references: [id], onDelete: SetNull)
   contentLink          String              @db.Text
+  contentPasswordEncrypted String?         @db.Text
   reason               String              @db.Text
   reporterEmail        String?             @db.VarChar(255)
   createdAt            DateTime            @default(now())

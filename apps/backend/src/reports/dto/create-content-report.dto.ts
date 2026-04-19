@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 
 export class CreateContentReportDto {
   @IsString()
@@ -15,4 +15,11 @@ export class CreateContentReportDto {
   @IsEmail({}, { message: 'Reporter email must be a valid email address' })
   @MaxLength(255, { message: "Reporter email can't be longer than 255 characters" })
   reporterEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100, {
+    message: 'Content password must have between 1 and 100 characters',
+  })
+  contentPassword?: string;
 }

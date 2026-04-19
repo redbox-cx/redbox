@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ReportedContentType } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
+import { Prisma, ReportedContentType } from '@prisma/client';
 import { PrismaService } from 'src/prisma.service';
 import { CreateContentReportDto } from './dto/create-content-report.dto';
+import { encryptReportedContentPassword } from './report-content-password.util';
 
 type ParsedContentLink = {
   contentType: ReportedContentType;
@@ -22,18 +24,25 @@ export class ReportsService {
 
   async createContentReport(dto: CreateContentReportDto) {
     const normalizedLink = dto.link.trim();
-    const target = await this.resolveContentTarget(normalizedLink);
+    const extractedPassword = this.extractPasswordFromLink(normalizedLink);
+    const contentPassword = dto.contentPassword?.trim() || extractedPassword || null;
+    const target = await this.resolveContentTarget(normalizedLink, contentPassword);
+    const sanitizedLink = this.sanitizeContentLink(normalizedLink);
+    const createData: Prisma.ContentReportUncheckedCreateInput = {
+      contentType: target.contentType,
+      reportedUserId: target.reportedUserId,
+      fileId: target.fileId,
+      binId: target.binId,
+      contentLink: sanitizedLink,
+      contentPasswordEncrypted: contentPassword
+        ? encryptReportedContentPassword(contentPassword)
+        : null,
+      reason: dto.reason.trim(),
+      reporterEmail: dto.reporterEmail?.trim().toLowerCase() || null,
+    };
 
     const report = await this.prismaService.contentReport.create({
-      data: {
-        contentType: target.contentType,
-        reportedUserId: target.reportedUserId,
-        fileId: target.fileId,
-        binId: target.binId,
-        contentLink: normalizedLink,
-        reason: dto.reason.trim(),
-        reporterEmail: dto.reporterEmail?.trim().toLowerCase() || null,
-      },
+      data: createData,
       select: {
         id: true,
         createdAt: true,
@@ -46,7 +55,10 @@ export class ReportsService {
     };
   }
 
-  private async resolveContentTarget(link: string): Promise<ResolvedContentTarget> {
+  private async resolveContentTarget(
+    link: string,
+    contentPassword: string | null,
+  ): Promise<ResolvedContentTarget> {
     const parsedLink = this.parseContentLink(link);
 
     if (parsedLink.contentType === ReportedContentType.FILE) {
@@ -59,12 +71,19 @@ export class ReportsService {
           id: true,
           userId: true,
           expiresAt: true,
+          passwordHash: true,
         },
       });
 
       if (!file || new Date() > file.expiresAt) {
         throw new NotFoundException('The reported upload could not be found');
       }
+
+      await this.assertProtectedContentPassword(
+        file.passwordHash,
+        contentPassword,
+        'upload',
+      );
 
       return {
         contentType: ReportedContentType.FILE,
@@ -83,12 +102,19 @@ export class ReportsService {
         id: true,
         userId: true,
         expiresAt: true,
+        passwordHash: true,
       },
     });
 
     if (!bin || (bin.expiresAt !== null && new Date() > bin.expiresAt)) {
       throw new NotFoundException('The reported bin could not be found');
     }
+
+    await this.assertProtectedContentPassword(
+      bin.passwordHash,
+      contentPassword,
+      'bin',
+    );
 
     return {
       contentType: ReportedContentType.BIN,
@@ -169,6 +195,53 @@ export class ReportsService {
       } catch {
         throw new BadRequestException('Invalid content link');
       }
+    }
+  }
+
+  private async assertProtectedContentPassword(
+    passwordHash: string | null,
+    contentPassword: string | null,
+    contentTypeLabel: 'upload' | 'bin',
+  ) {
+    if (!passwordHash) {
+      return;
+    }
+
+    if (!contentPassword) {
+      throw new BadRequestException(
+        `This ${contentTypeLabel} is password protected, so the report must include the password`,
+      );
+    }
+
+    const isMatch = await bcrypt.compare(contentPassword, passwordHash);
+    if (!isMatch) {
+      throw new BadRequestException(`The provided password for this ${contentTypeLabel} is invalid`);
+    }
+  }
+
+  private extractPasswordFromLink(link: string) {
+    const url = this.toUrl(link);
+    return url.searchParams.get('password')?.trim() || null;
+  }
+
+  private sanitizeContentLink(link: string) {
+    const isAbsolute = this.isAbsoluteUrl(link);
+    const url = this.toUrl(link);
+    url.searchParams.delete('password');
+
+    if (isAbsolute) {
+      return url.toString();
+    }
+
+    return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  private isAbsoluteUrl(link: string) {
+    try {
+      new URL(link);
+      return true;
+    } catch {
+      return false;
     }
   }
 }

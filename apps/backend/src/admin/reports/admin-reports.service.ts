@@ -14,6 +14,7 @@ import {
 } from '../dto/reports.dto';
 import { OffsetPaginationQueryDto } from '../dto/common.dto';
 import { AdminUsersService } from '../users/admin-users.service';
+import { decryptReportedContentPassword } from 'src/reports/report-content-password.util';
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -60,7 +61,16 @@ export class AdminReportsService {
       where: {
         resolvedAt: query.status === 'archived' ? { not: null } : null,
       },
-      include: {
+      select: {
+        id: true,
+        createdAt: true,
+        contentLink: true,
+        contentPasswordEncrypted: true,
+        reason: true,
+        reporterEmail: true,
+        fileId: true,
+        binId: true,
+        contentType: true,
         reportedUser: {
           select: {
             id: true,
@@ -104,6 +114,8 @@ export class AdminReportsService {
         fileCreationDate: resource?.createdAt?.toISOString() ?? report.createdAt.toISOString(),
         reason: report.reason,
         reporterEmail: report.reporterEmail,
+        contentPassword: decryptReportedContentPassword(report.contentPasswordEncrypted),
+        hasContentPassword: Boolean(report.contentPasswordEncrypted),
         fileId: report.fileId ?? report.binId ?? undefined,
         contentType: report.contentType.toLowerCase(),
       };
