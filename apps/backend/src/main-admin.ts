@@ -5,6 +5,9 @@ import { json, urlencoded } from 'express';
 import { AdminModule } from './admin/admin.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { PrismaService } from './prisma.service';
+import { startServiceRuntimeHeartbeat } from './common/dashboard/runtime-tracker';
+import { ServiceRuntimeName } from '@prisma/client';
 
 async function bootstrap() {
   const app = await NestFactory.create(AdminModule, {
@@ -40,6 +43,7 @@ async function bootstrap() {
 
   const port = Number(process.env.ADMIN_PORT ?? 3001);
   await app.listen(port);
+  await startServiceRuntimeHeartbeat(app.get(PrismaService), ServiceRuntimeName.ADMIN_BACKEND);
 
   console.log(`Admin backend running on port:${port}`);
 }

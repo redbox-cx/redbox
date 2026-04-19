@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
-import { AdminChangePasswordDto, AdminLoginDto } from './dto/auth.dto';
+import { AdminChangePasswordDto, AdminLoginDto } from '../dto/auth.dto';
 
 @Injectable()
 export class AdminAuthService {

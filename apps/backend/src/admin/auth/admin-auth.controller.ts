@@ -1,9 +1,9 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { GetUser, GetUserId } from 'src/auth/decorator/get-user.decorator';
-import { AdminJwtAuthGuard } from './guard/admin-auth.guard';
+import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminAuthService } from './admin-auth.service';
-import { AdminChangePasswordDto, AdminLoginDto } from './dto/auth.dto';
+import { AdminChangePasswordDto, AdminLoginDto } from '../dto/auth.dto';
 
 @Controller('admin/auth')
 export class AdminAuthController {

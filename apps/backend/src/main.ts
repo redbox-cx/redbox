@@ -5,6 +5,8 @@ import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { json, urlencoded } from 'express';
+import { PrismaService } from './prisma.service';
+import { startMainAppDashboardTelemetry } from './common/dashboard/runtime-tracker';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -62,6 +64,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ??   3000;
   await app.listen(port);
+  await startMainAppDashboardTelemetry(app.get(PrismaService));
   
   console.log(`Backend running on port:${port}`);
 }

@@ -44,6 +44,11 @@ enum AuditActorType {
   SYSTEM
 }
 
+enum ServiceRuntimeName {
+  MAIN_APP
+  ADMIN_BACKEND
+}
+
 model User {
   id          String     @id @default(uuid())
   username    String     @unique @db.VarChar(50)
@@ -231,4 +236,25 @@ model AdminAuditLog {
   @@index([targetUserId])
   @@index([action])
   @@index([createdAt])
+}
+
+model ServiceRuntime {
+  service         ServiceRuntimeName @id
+  startedAt       DateTime
+  lastHeartbeatAt DateTime
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([lastHeartbeatAt])
+}
+
+model AdminStorageSnapshot {
+  id            String   @id @default(uuid())
+  uploadsBytes  BigInt   @default(0)
+  mailBytes     BigInt   @default(0)
+  binsBytes     BigInt   @default(0)
+  totalUsedBytes BigInt  @default(0)
+  recordedAt    DateTime @default(now())
+
+  @@index([recordedAt])
 }
