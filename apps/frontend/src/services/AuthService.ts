@@ -45,4 +45,9 @@ export const AuthService = {
         const { data } = await apiClient.post('/auth/recover-password', dto);
         return data;
     },
+
+    async reactivateAccount(reactivationToken: string) {
+        const { data } = await apiClient.post('/auth/account/reactivate', { reactivationToken });
+        return data;
+    },
 };
