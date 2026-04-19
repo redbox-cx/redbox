@@ -49,6 +49,11 @@ enum ServiceRuntimeName {
   ADMIN_BACKEND
 }
 
+enum ReportedContentType {
+  FILE
+  BIN
+}
+
 model User {
   id          String     @id @default(uuid())
   username    String     @unique @db.VarChar(50)
@@ -68,6 +73,7 @@ model User {
   restrictions   UserRestriction[]
   deletionRequests UserDeletionRequest[]
   auditLogs      AdminAuditLog[]     @relation("AuditTargetUser")
+  contentReports ContentReport[]     @relation("ReportedContentOwner")
 
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
@@ -91,6 +97,7 @@ model AdminUser {
   sessionKey   String     @default(uuid())
   createdRestrictions UserRestriction[] @relation("RestrictionCreatedByAdmin")
   auditLogs          AdminAuditLog[]    @relation("AuditActorAdmin")
+  resolvedContentReports ContentReport[] @relation("ResolvedContentReports")
 }
 
 model InviteCode {
@@ -116,6 +123,7 @@ model File {
 
   shareToken   String  @unique @default(uuid())
   passwordHash String? @db.VarChar(100)
+  contentReports ContentReport[] @relation("ReportedContentFile")
 
   encryptedFileKey String @db.Text // File-Secret, encrypted with masterkey
   fileKeyIv        String @db.VarChar(50) // IV for encryption of file-key
@@ -143,6 +151,7 @@ model Bin {
   expiresAt    DateTime?
   shareToken   String    @unique @default(uuid())
   passwordHash String?   @db.VarChar(100)
+  contentReports ContentReport[] @relation("ReportedContentBin")
 
   // e2ee
   encryptedBinKey String @db.Text
@@ -257,4 +266,30 @@ model AdminStorageSnapshot {
   recordedAt    DateTime @default(now())
 
   @@index([recordedAt])
+}
+
+model ContentReport {
+  id                   String              @id @default(uuid())
+  contentType          ReportedContentType
+  reportedUserId       String
+  reportedUser         User                @relation("ReportedContentOwner", fields: [reportedUserId], references: [id])
+  fileId               String?
+  file                 File?               @relation("ReportedContentFile", fields: [fileId], references: [id], onDelete: SetNull)
+  binId                String?
+  bin                  Bin?                @relation("ReportedContentBin", fields: [binId], references: [id], onDelete: SetNull)
+  contentLink          String              @db.Text
+  reason               String              @db.Text
+  reporterEmail        String?             @db.VarChar(255)
+  createdAt            DateTime            @default(now())
+  resolvedAt           DateTime?
+  actionTaken          String?             @db.VarChar(500)
+  resolvedByAdminUserId String?
+  resolvedByAdminUser  AdminUser?          @relation("ResolvedContentReports", fields: [resolvedByAdminUserId], references: [id], onDelete: SetNull)
+
+  @@index([reportedUserId])
+  @@index([fileId])
+  @@index([binId])
+  @@index([createdAt])
+  @@index([resolvedAt])
+  @@index([resolvedByAdminUserId])
 }

@@ -45,10 +45,13 @@ export class AdminDashboardService {
   }
 
   async getDashboard() {
-    const [storage, userStats, userGrowthHistory] = await Promise.all([
+    const [storage, userStats, userGrowthHistory, openReports] = await Promise.all([
       this.getStorageCount(),
       this.getUserStats(),
       this.getUserGrowthHistory(),
+      this.prismaService.contentReport.count({
+        where: { resolvedAt: null },
+      }),
     ]);
 
     return {
@@ -64,7 +67,7 @@ export class AdminDashboardService {
           new7dBytes: storage.newUsedLast7dBytes,
           new30dBytes: storage.newUsedLast30dBytes,
         },
-        reportsOpen: 0,
+        reportsOpen: openReports,
         traffic: null,
       },
       breakdown: storage.breakdown,

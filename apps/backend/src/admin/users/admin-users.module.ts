@@ -12,5 +12,6 @@ import { AdminUsersService } from './admin-users.service';
   ],
   controllers: [AdminUsersController],
   providers: [AdminUsersService],
+  exports: [AdminUsersService],
 })
 export class AdminUsersModule {}
