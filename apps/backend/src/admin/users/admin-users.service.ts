@@ -22,6 +22,7 @@ import { PrismaService } from 'src/prisma.service';
 import {
   AdminUsersQueryDto,
   ChangeAdminUsernameDto,
+  ClearAdminUserDataDto,
   DeleteAdminUserFilesDto,
   ForceLogoutAdminUserDto,
   UpdateAdminUserStatusDto,
@@ -33,6 +34,18 @@ type MinimalAdminUser = {
   avatar: UserAvatar;
   createdAt: Date;
   status: UserStatus;
+};
+
+type UserContentDeletionSnapshot = {
+  fileStorageNames: string[];
+  mailStorageKeys: string[];
+};
+
+type UserContentDeletionCounts = {
+  deletedUploadsCount: number;
+  deletedMailsCount: number;
+  deletedBinsCount: number;
+  deletedLinksCount: number;
 };
 
 @Injectable()
@@ -130,6 +143,51 @@ export class AdminUsersService {
       newLast7d,
       newLast30d,
       ...counts,
+    };
+  }
+
+  async getUsersOverviewStats() {
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const baseWhere: Prisma.UserWhereInput = {
+      status: { not: UserStatus.DELETED },
+    };
+
+    const [userStats, newToday, adminActionsLast7Days] = await Promise.all([
+      this.getUsersStats(),
+      this.prismaService.user.count({
+        where: {
+          ...baseWhere,
+          createdAt: { gte: startOfToday },
+        },
+      }),
+      this.prismaService.adminAuditLog.count({
+        where: {
+          actorType: AuditActorType.ADMIN,
+          createdAt: { gte: sevenDaysAgo },
+        },
+      }),
+    ]);
+
+    return {
+      totalUsers: {
+        value: userStats.totalUsers,
+        newLast7Days: userStats.newLast7d,
+      },
+      activeBans: {
+        value: userStats.bannedUsers,
+        lockedUsers: userStats.lockedUsers,
+        pendingUsers: userStats.pendingUsers,
+      },
+      newToday: {
+        value: newToday,
+      },
+      adminActions7d: {
+        value: adminActionsLast7Days,
+      },
     };
   }
 
@@ -475,6 +533,38 @@ export class AdminUsersService {
     };
   }
 
+  async clearUserData(adminUserId: string, userId: string, dto: ClearAdminUserDataDto) {
+    await this.findUserOrThrow(userId);
+
+    const snapshot = await this.buildUserContentDeletionSnapshot(userId);
+
+    await Promise.all([
+      this.deleteS3Objects(this.fileS3, this.filesBucket, snapshot.fileStorageNames),
+      this.deleteS3Objects(this.mailS3, this.mailsBucket, snapshot.mailStorageKeys),
+    ]);
+
+    const deletedCounts = await this.prismaService.$transaction(async (prisma) => {
+      const counts = await this.clearUserContentRecords(prisma, userId);
+
+      await this.createAuditLog(prisma, {
+        actorType: AuditActorType.ADMIN,
+        adminUserId,
+        targetUserId: userId,
+        action: 'user_data_cleared',
+        reason: dto.reason,
+        meta: counts,
+      });
+
+      return counts;
+    });
+
+    return {
+      success: true,
+      userId,
+      ...deletedCounts,
+    };
+  }
+
   private async findUserOrThrow(userId: string): Promise<MinimalAdminUser> {
     const user = await this.prismaService.user.findUnique({
       where: { id: userId },
@@ -640,41 +730,17 @@ export class AdminUsersService {
       deletionRequestId?: string;
     },
   ) {
-    const [files, mails] = await Promise.all([
-      this.prismaService.file.findMany({
-        where: { userId },
-        select: {
-          storageName: true,
-        },
-      }),
-      this.prismaService.mail.findMany({
-        where: { userId },
-        include: {
-          attachments: {
-            select: { storageKey: true },
-          },
-        },
-      }),
-    ]);
+    const snapshot = await this.buildUserContentDeletionSnapshot(userId);
 
-    await this.deleteS3Objects(
-      this.fileS3,
-      this.filesBucket,
-      files.map((file) => file.storageName),
-    );
-
-    const mailStorageKeys = mails.flatMap((mail) => [
-      mail.storageKey,
-      ...mail.attachments.map((attachment) => attachment.storageKey),
+    await Promise.all([
+      this.deleteS3Objects(this.fileS3, this.filesBucket, snapshot.fileStorageNames),
+      this.deleteS3Objects(this.mailS3, this.mailsBucket, snapshot.mailStorageKeys),
     ]);
-    await this.deleteS3Objects(this.mailS3, this.mailsBucket, mailStorageKeys);
 
     await this.prismaService.$transaction(async (prisma) => {
+      const clearedData = await this.clearUserContentRecords(prisma, userId);
+
       await prisma.blockedSender.deleteMany({ where: { userId } });
-      await prisma.link.deleteMany({ where: { userId } });
-      await prisma.bin.deleteMany({ where: { userId } });
-      await prisma.mail.deleteMany({ where: { userId } });
-      await prisma.file.deleteMany({ where: { userId } });
       await prisma.inviteCode.deleteMany({ where: { userId } });
       await this.resolveOpenRestrictions(prisma, userId);
 
@@ -704,10 +770,58 @@ export class AdminUsersService {
         previousStatus: options.previousStatus,
         newStatus: UserStatus.DELETED,
         reason: options.reason,
+        meta: clearedData,
       });
     });
 
     await this.redis.del(`masterkey:${userId}`);
+  }
+
+  private async buildUserContentDeletionSnapshot(userId: string): Promise<UserContentDeletionSnapshot> {
+    const [files, mails] = await Promise.all([
+      this.prismaService.file.findMany({
+        where: { userId },
+        select: {
+          storageName: true,
+        },
+      }),
+      this.prismaService.mail.findMany({
+        where: { userId },
+        select: {
+          storageKey: true,
+          attachments: {
+            select: { storageKey: true },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      fileStorageNames: files.map((file) => file.storageName),
+      mailStorageKeys: mails.flatMap((mail) => [
+        mail.storageKey,
+        ...mail.attachments.map((attachment) => attachment.storageKey),
+      ]),
+    };
+  }
+
+  private async clearUserContentRecords(
+    prisma: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<UserContentDeletionCounts> {
+    const [deletedLinks, deletedBins, deletedMails, deletedFiles] = await Promise.all([
+      prisma.link.deleteMany({ where: { userId } }),
+      prisma.bin.deleteMany({ where: { userId } }),
+      prisma.mail.deleteMany({ where: { userId } }),
+      prisma.file.deleteMany({ where: { userId } }),
+    ]);
+
+    return {
+      deletedUploadsCount: deletedFiles.count,
+      deletedMailsCount: deletedMails.count,
+      deletedBinsCount: deletedBins.count,
+      deletedLinksCount: deletedLinks.count,
+    };
   }
 
   private async deleteS3Objects(client: S3Client, bucket: string, keys: string[]) {

@@ -10,6 +10,7 @@ import {
   AdminContentReportsQueryDto,
   BanReportedUserDto,
   DeleteReportedContentDto,
+  ReopenAdminReportDto,
   ResolveAdminReportDto,
 } from '../dto/reports.dto';
 import { OffsetPaginationQueryDto } from '../dto/common.dto';
@@ -303,6 +304,53 @@ export class AdminReportsService {
     }
 
     throw new NotFoundException('Report not found');
+  }
+
+  async reopenReport(reportId: string, dto: ReopenAdminReportDto, adminUserId: string) {
+    const report = await this.prismaService.contentReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        reportedUserId: true,
+        contentType: true,
+        contentLink: true,
+        fileId: true,
+        binId: true,
+        resolvedAt: true,
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
+    if (!report.resolvedAt) {
+      throw new BadRequestException('Report is already open');
+    }
+
+    await this.prismaService.$transaction(async (prisma) => {
+      await prisma.contentReport.update({
+        where: { id: reportId },
+        data: {
+          resolvedAt: null,
+          actionTaken: null,
+          resolvedByAdminUserId: null,
+        },
+      });
+
+      await this.createAuditLog(prisma, {
+        adminUserId,
+        targetUserId: report.reportedUserId,
+        action: 'report_reopened',
+        reason: dto.reason,
+        meta: this.buildReportAuditMeta(report),
+      });
+    });
+
+    return {
+      success: true,
+      message: 'Report reopened successfully',
+    };
   }
 
   private async findOpenContentReportOrThrow(reportId: string) {

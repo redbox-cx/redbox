@@ -5,6 +5,7 @@ import { AdminUsersService } from './admin-users.service';
 import {
   AdminUsersQueryDto,
   ChangeAdminUsernameDto,
+  ClearAdminUserDataDto,
   DeleteAdminUserFilesDto,
   ForceLogoutAdminUserDto,
   UpdateAdminUserStatusDto,
@@ -36,6 +37,14 @@ export class AdminUsersController {
     return {
       message: 'User stats fetched successfully',
       result: await this.adminUsersService.getUsersStats(),
+    };
+  }
+
+  @Get('users/overview-stats')
+  async getUsersOverviewStats() {
+    return {
+      message: 'User overview stats fetched successfully',
+      result: await this.adminUsersService.getUsersOverviewStats(),
     };
   }
 
@@ -103,6 +112,18 @@ export class AdminUsersController {
     return {
       message: 'User files deleted successfully',
       result: await this.adminUsersService.deleteUserFiles(adminUserId, userId, dto),
+    };
+  }
+
+  @Delete('users/:userId/data')
+  async clearUserData(
+    @GetUserId() adminUserId: string,
+    @Param('userId') userId: string,
+    @Body() dto: ClearAdminUserDataDto,
+  ) {
+    return {
+      message: 'User data cleared successfully',
+      result: await this.adminUsersService.clearUserData(adminUserId, userId, dto),
     };
   }
 }

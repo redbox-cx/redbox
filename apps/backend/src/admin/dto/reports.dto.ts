@@ -29,6 +29,8 @@ class AdminReportReasonDto {
 
 export class ResolveAdminReportDto extends AdminReportReasonDto {}
 
+export class ReopenAdminReportDto extends AdminReportReasonDto {}
+
 export class DeleteReportedContentDto extends AdminReportReasonDto {}
 
 export class BanReportedUserDto extends AdminReportReasonDto {

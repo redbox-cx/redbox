@@ -6,6 +6,7 @@ import {
   AdminContentReportsQueryDto,
   BanReportedUserDto,
   DeleteReportedContentDto,
+  ReopenAdminReportDto,
   ResolveAdminReportDto,
 } from '../dto/reports.dto';
 import { OffsetPaginationQueryDto } from '../dto/common.dto';
@@ -84,6 +85,19 @@ export class AdminReportsController {
     @Body() dto: ResolveAdminReportDto,
   ) {
     const result = await this.adminReportsService.resolveReport(reportId, dto, adminUserId);
+    return {
+      message: result.message,
+      result,
+    };
+  }
+
+  @Post('reports/:reportId/reopen')
+  async reopenReport(
+    @GetUserId() adminUserId: string,
+    @Param('reportId') reportId: string,
+    @Body() dto: ReopenAdminReportDto,
+  ) {
+    const result = await this.adminReportsService.reopenReport(reportId, dto, adminUserId);
     return {
       message: result.message,
       result,

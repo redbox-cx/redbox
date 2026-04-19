@@ -80,6 +80,8 @@ export class UpdateAdminUserStatusDto extends AdminReasonDto {
 
 export class ForceLogoutAdminUserDto extends AdminReasonDto {}
 
+export class ClearAdminUserDataDto extends AdminReasonDto {}
+
 export class ChangeAdminUsernameDto extends AdminReasonDto {
   @IsString()
   @IsNotEmpty({ message: "New username can't be empty" })
