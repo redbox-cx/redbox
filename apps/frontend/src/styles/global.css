@@ -3318,6 +3318,76 @@ html.dash-page {
     flex-shrink: 0;
 }
 
+.dl-card-report-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: 1px solid rgba(0,0,0,0.15);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: 'Montserrat', sans-serif;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    line-height: 1.4;
+}
+
+.dl-card-report-btn:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.report-link-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.report-link-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.report-reason-input {
+    width: 100%;
+    background: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.88rem;
+    font-family: inherit;
+    color: var(--color-contrast);
+    resize: vertical;
+    min-height: 80px;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+}
+
+.report-reason-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.report-pw-verified {
+    position: absolute;
+    right: 12px;
+    color: #22c55e;
+    font-size: 0.9rem;
+    pointer-events: none;
+}
+
 .dl-nav-brand {
     display: flex;
     align-items: center;
@@ -3916,6 +3986,10 @@ html.dash-page {
 }
 
 .shr-input::placeholder {
+    color: var(--color-inactive);
+}
+
+.shr-input:disabled {
     color: var(--color-inactive);
 }
 
@@ -4809,6 +4883,7 @@ html.dash-page {
 
 .settings-modal-cancel:hover {
     background: #f1f5f9;
+    color: #000;
 }
 
 .settings-modal-confirm {

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CryptoService } from '../services/CryptoService';
 import { ENCRYPTED_CHUNK_SIZE } from '../services/FileService';
 import logoRed from '../assets/images/logo_red.png';
+import { ReportModal } from '../components/ReportModal';
 
 type Stage = 'idle' | 'password' | 'downloading' | 'decrypting' | 'preview' | 'error';
 
@@ -40,6 +41,8 @@ export function Download() {
     const [previewUrl, setPreviewUrl] = useState('');
     const [decryptedBlob, setDecryptedBlob] = useState<Blob | null>(null);
     const downloadLinkRef = useRef<HTMLAnchorElement>(null);
+    const [reportOpen, setReportOpen] = useState(false);
+    const [isPasswordProtected, setIsPasswordProtected] = useState(false);
 
     const token = new URLSearchParams(window.location.search).get('token') ?? '';
     const keyHex = window.location.hash.slice(1);
@@ -74,6 +77,7 @@ export function Download() {
             });
 
             if (response.status === 403) {
+                setIsPasswordProtected(true);
                 setStage('password');
                 if (pwd) setErrorMsg('Incorrect password. Try again.');
                 return;
@@ -175,6 +179,7 @@ export function Download() {
                     <span className="logo-text" style={{ display: 'inline' }}>redbox<span className="dot">.</span></span>
                 </a>
             </nav>
+            {reportOpen && <ReportModal onClose={() => setReportOpen(false)} isPasswordProtected={isPasswordProtected} knownPassword={isPasswordProtected && stage !== 'password' && stage !== 'idle' ? password : undefined} />}
 
             <main className="dl-main">
                 <div className="dl-card">
@@ -188,6 +193,11 @@ export function Download() {
                             <div className="dl-file-badges">
                                 {fileSize > 0 && <span className="dl-badge">{formatBytes(fileSize)}</span>}
                                 <span className="dl-badge encrypted"><i className="bi bi-shield-lock-fill" /> End-to-end encrypted</span>
+                                {stage === 'preview' && (
+                                    <button className="dl-card-report-btn" onClick={() => setReportOpen(true)} title="Report content">
+                                        <i className="bi bi-flag" /> Report
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>

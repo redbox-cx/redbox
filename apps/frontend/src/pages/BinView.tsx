@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import logoRed from '@/assets/images/logo_red.png';
 import { BinService } from '../services/BinService';
 import { BinCrypto } from '../services/BinCrypto';
+import { ReportModal } from '../components/ReportModal';
 
 type State = 'loading' | 'password' | 'decrypting' | 'done' | 'error';
 
@@ -19,6 +20,8 @@ export function BinView() {
     const [passwordError, setPasswordError] = useState('');
     const [expiresAt, setExpiresAt] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const [reportOpen, setReportOpen] = useState(false);
+    const [isPasswordProtected, setIsPasswordProtected] = useState(false);
 
     const keyHex = window.location.hash.slice(1);
 
@@ -45,6 +48,7 @@ export function BinView() {
         } catch (err: any) {
             const status = err.response?.status;
             if (status === 403) {
+                setIsPasswordProtected(true);
                 setPasswordError(pwd ? 'Incorrect password.' : '');
                 setState('password');
             } else if (status === 404) {
@@ -84,6 +88,7 @@ export function BinView() {
                     <span className="dl-nav-logo-text">redbox<span className="dot">.</span></span>
                 </a>
             </nav>
+            {reportOpen && <ReportModal onClose={() => setReportOpen(false)} isPasswordProtected={isPasswordProtected} knownPassword={isPasswordProtected && state === 'done' ? password : undefined} />}
 
             <div className="dl-body">
                 <div className="bin-view-card">
@@ -95,9 +100,16 @@ export function BinView() {
                             <p className="dl-file-name">
                                 {state === 'done' ? title : 'Encrypted Bin'}
                             </p>
-                            <span className="dl-e2e-badge">
-                                <i className="bi bi-shield-lock-fill" /> End-to-end encrypted
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span className="dl-e2e-badge">
+                                    <i className="bi bi-shield-lock-fill" /> End-to-end encrypted
+                                </span>
+                                {state === 'done' && (
+                                    <button className="dl-card-report-btn" onClick={() => setReportOpen(true)} title="Report content">
+                                        <i className="bi bi-flag" /> Report
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
