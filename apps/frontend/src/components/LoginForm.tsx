@@ -28,7 +28,8 @@ export function LoginForm() {
             login(access_token, refresh_token, userData);
             navigate("/dashboard");
         } catch (err: any) {
-            setError("Invalid credentials.");
+            const msg = err.response?.data?.message;
+            setError(Array.isArray(msg) ? msg[0] : msg || 'Invalid credentials.');
             localStorage.removeItem('access_token');
         } finally {
             setIsLoading(false);
