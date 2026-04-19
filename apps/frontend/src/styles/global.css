@@ -50,7 +50,7 @@ html.settings-page .dash-top-nav {
     top: 0;
 }
 
-@media (max-height: 780px) and (min-width: 900px) {
+@media (max-height: 780px) and (min-width: 1085px) {
     html.dash-page {
         overflow: hidden;
     }
@@ -60,7 +60,7 @@ html.settings-page .dash-top-nav {
     }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1085px) {
     html.dash-page {
         overflow-y: auto;
         overflow-x: hidden;
@@ -2473,7 +2473,7 @@ html.dash-page {
     color: var(--color-primary);
 }
 
-@media (max-height: 800px) and (min-width: 900px) {
+@media (max-height: 800px) and (min-width: 1085px) {
     .dash-container {
         padding: 6px 40px 14px;
     }
@@ -2501,7 +2501,7 @@ html.dash-page {
     }
 }
 
-@media (max-height: 780px) and (min-width: 900px) {
+@media (max-height: 780px) and (min-width: 1085px) {
     .dash-layout {
         position: relative;
         height: auto;
@@ -2556,7 +2556,7 @@ html.dash-page {
     }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1085px) {
     .dash-hamburger { display: flex; }
     .nav-center { display: none; }
     .nav-right { display: none; }
@@ -2596,7 +2596,7 @@ html.dash-page {
     }
 
     .dash-bottom-row {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: 1fr;
         flex: none;
         height: auto;
     }
