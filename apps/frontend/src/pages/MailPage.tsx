@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { TopBar } from '../components/dashboard/TopBar';
 import { useAuth } from '../context/AuthContext';
-import { MailService, type MailListItem, type MailDetail, type MailFolder } from '../services/MailService';
+import { MailService, type MailListItem, type MailDetail, type MailFolder, type MailAttachment } from '../services/MailService';
 import { getAvatarSrc } from '../config/avatars';
 
 const PAGE_SIZE = 50;
@@ -39,6 +39,22 @@ function formatFull(iso: string): string {
     });
 }
 
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentIcon(mimetype: string): string {
+    if (mimetype.startsWith('image/')) return 'bi-file-earmark-image';
+    if (mimetype === 'application/pdf') return 'bi-file-earmark-pdf';
+    if (mimetype.includes('zip') || mimetype.includes('compressed')) return 'bi-file-earmark-zip';
+    if (mimetype.startsWith('text/')) return 'bi-file-earmark-text';
+    if (mimetype.includes('word') || mimetype.includes('document')) return 'bi-file-earmark-word';
+    if (mimetype.includes('sheet') || mimetype.includes('excel')) return 'bi-file-earmark-excel';
+    return 'bi-file-earmark';
+}
+
 type SortKey = 'newest' | 'oldest' | 'unread' | 'read';
 const SORT_LABELS: Record<SortKey, string> = {
     'newest': 'Newest first',
@@ -52,26 +68,24 @@ function PageButtons({ page, total, onChange }: { page: number; total: number; o
 
     const items: (number | '…')[] = [];
 
-    if (total <= 3) {
+    if (total <= 7) {
         for (let i = 0; i < total; i++) items.push(i);
-    } else if (page === 0) {
-        items.push(0, 1, '…', total - 1);
-    } else if (page === total - 1) {
-        items.push(0, '…', total - 2, total - 1);
     } else {
         items.push(0);
-        if (page > 1) items.push('…');
-        items.push(page);
-        if (page < total - 2) items.push('…');
+        if (page > 2) items.push('…');
+        const start = Math.max(1, page - 1);
+        const end = Math.min(total - 2, page + 1);
+        for (let i = start; i <= end; i++) items.push(i);
+        if (page < total - 3) items.push('…');
         items.push(total - 1);
     }
 
     return (
         <>
-            {items.map((p, i) =>
-                p === '…'
+            {items.map((item, i) =>
+                item === '…'
                     ? <span key={`e${i}`} className="mc-page-ellipsis">…</span>
-                    : <button key={p} className={`mc-page-btn ${page === p ? 'mc-page-btn--active' : ''}`} onClick={() => onChange(p as number)}>{(p as number) + 1}</button>
+                    : <button key={item} className={`mc-page-btn ${page === item ? 'mc-page-btn--active' : ''}`} onClick={() => onChange(item as number)}>{(item as number) + 1}</button>
             )}
         </>
     );
@@ -95,6 +109,8 @@ export function MailPage() {
     const [copiedEmail, setCopiedEmail] = useState(false);
     const [gearRot, setGearRot] = useState(0);
     const [mailStorageMb, setMailStorageMb] = useState(0);
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const sortRef = useRef<HTMLDivElement>(null);
 
@@ -111,19 +127,25 @@ export function MailPage() {
         return () => document.removeEventListener('mousedown', h);
     }, []);
 
-    const loadPage = async (p: number, s = sort, f = folder) => {
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setDebouncedSearch(search);
+            setPage(0);
+        }, 350);
+        return () => clearTimeout(t);
+    }, [search]);
+
+    const loadPage = async (p: number, s: SortKey, f: MailFolder, q: string) => {
         setLoading(true);
         try {
-            const res = await MailService.getAll(PAGE_SIZE, p * PAGE_SIZE, s, f);
-            if (res.mails.length > 0) {
-                setMails(res.mails);
-                setTotalCount(res.totalCount);
-            }
-        } catch { /* keep dummy data */ }
+            const res = await MailService.getAll(PAGE_SIZE, p * PAGE_SIZE, s, f, q);
+            setMails(res.mails);
+            setTotalCount(res.totalCount);
+        } catch {}
         finally { setLoading(false); }
     };
 
-    useEffect(() => { loadPage(page, sort, folder); }, [page, sort, folder]);
+    useEffect(() => { setMails([]); loadPage(page, sort, folder, debouncedSearch); }, [page, sort, folder, debouncedSearch]);
 
     useEffect(() => {
         MailService.getStorage()
@@ -132,21 +154,13 @@ export function MailPage() {
     }, []);
 
     const displayed = useMemo(() => {
-        let list = mails;
-        if (search.trim()) {
-            const q = search.toLowerCase();
-            list = list.filter(m =>
-                m.from.toLowerCase().includes(q) ||
-                (m.subject ?? '').toLowerCase().includes(q)
-            );
-        }
-        return [...list].sort((a, b) => {
+        return [...mails].sort((a, b) => {
             if (sort === 'oldest') return +new Date(a.createdAt) - +new Date(b.createdAt);
             if (sort === 'unread') return (a.isRead ? 1 : 0) - (b.isRead ? 1 : 0);
             if (sort === 'read') return (a.isRead ? 0 : 1) - (b.isRead ? 0 : 1);
             return +new Date(b.createdAt) - +new Date(a.createdAt);
         });
-    }, [mails, search, sort]);
+    }, [mails, sort]);
 
     const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
     const userEmail = (mails[0]?.to ?? '__user__@redbox.cx').replace('__user__', user?.username ?? 'user');
@@ -175,7 +189,10 @@ export function MailPage() {
         try {
             const detail = await MailService.getById(mail.id);
             setSelected(detail);
-            if (!mail.isRead) setMails(prev => prev.map(m => m.id === mail.id ? { ...m, isRead: true } : m));
+            if (!mail.isRead) {
+                setMails(prev => prev.map(m => m.id === mail.id ? { ...m, isRead: true } : m));
+                MailService.setReadStatus(mail.id, true).catch(() => {});
+            }
         } catch {}
         finally { setLoadingDetail(false); }
     };
@@ -249,6 +266,15 @@ export function MailPage() {
             setMails(prev => prev.map(m => checkedIds.has(m.id) ? { ...m, isRead } : m));
             setCheckedIds(new Set());
         } catch {}
+    };
+
+    const handleDownloadAttachment = async (attachment: MailAttachment) => {
+        if (!selected || downloadingId === attachment.id) return;
+        setDownloadingId(attachment.id);
+        try {
+            await MailService.downloadAttachment(selected.id, attachment.id, attachment.filename);
+        } catch {}
+        finally { setDownloadingId(null); }
     };
 
     const handleBulkMove = async (dest: MailFolder) => {
@@ -383,6 +409,7 @@ export function MailPage() {
                                             </div>
                                             <span className={`mc-row-subject ${!mail.isRead ? 'mc-row-subject--bold' : ''}`}>
                                                 {mail.subject || '(No subject)'}
+                                                {mail.hasAttachments && <i className="bi bi-paperclip mc-row-attach" />}
                                             </span>
                                         </div>
                                     </div>
@@ -502,6 +529,30 @@ export function MailPage() {
                                         <span className="mc-detail-ts">{formatFull(selected.createdAt)}</span>
                                     </div>
                                 </div>
+
+                                {selected.attachments?.length > 0 && (
+                                    <div className="mc-attachments">
+                                        <p className="mc-attachments-label">
+                                            <i className="bi bi-paperclip" /> {selected.attachments.length} attachment{selected.attachments.length !== 1 ? 's' : ''}
+                                        </p>
+                                        <div className="mc-attachments-list">
+                                            {selected.attachments.map(att => (
+                                                <button
+                                                    key={att.id}
+                                                    className={`mc-attachment-item ${downloadingId === att.id ? 'mc-attachment-item--loading' : ''}`}
+                                                    onClick={() => handleDownloadAttachment(att)}
+                                                    disabled={downloadingId === att.id}
+                                                    title={att.filename}
+                                                >
+                                                    <i className={`bi ${attachmentIcon(att.mimetype)} mc-attachment-icon`} />
+                                                    <span className="mc-attachment-name">{att.filename}</span>
+                                                    <span className="mc-attachment-size">{formatBytes(att.size)}</span>
+                                                    <i className={`bi bi-${downloadingId === att.id ? 'hourglass-split' : 'download'} mc-attachment-dl`} />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="mc-iframe-wrap">
                                     <iframe
