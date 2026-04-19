@@ -307,7 +307,7 @@ export function Settings() {
                             <i className="bi bi-trash3" style={{ color: 'var(--color-primary)' }} /> Delete Account
                         </h2>
                         <p className="settings-profile-since" style={{ margin: 0 }}>
-                            This will schedule your account for permanent deletion after a 7-day grace period. All your files, mails, links, and bins will be removed.
+                            This will schedule your account for permanent deletion. You will have a grace period to log back in and cancel. All your files, mails, links, and bins will be removed.
                         </p>
                         <button className="settings-delete-btn" onClick={openDeleteModal}>
                             <i className="bi bi-trash3" /> Delete my account
@@ -325,7 +325,7 @@ export function Settings() {
                         </div>
                         <h2 className="settings-modal-title">Delete Account</h2>
                         <p className="settings-modal-desc">
-                            Your account will be <strong>permanently deleted in 7 days</strong>. This includes all your files, mails, links, and bins. This cannot be undone.
+                            Your account will be <strong>permanently deleted</strong> after a grace period. You can cancel by logging in again before it expires. This includes all your files, mails, links, and bins.
                         </p>
                         <form onSubmit={handleDeleteAccount} className="settings-modal-form">
                             <div className="shr-input-wrap">

@@ -4609,7 +4609,7 @@ html.dash-page {
     margin: 0;
     font-size: 0.78rem;
     font-weight: 600;
-    color: var(--color-inactive);
+    color: var(--color-text-muted);
 }
 
 .settings-section-title {
@@ -4776,7 +4776,7 @@ html.dash-page {
 .settings-modal-desc {
     margin: 0;
     font-size: 0.88rem;
-    color: var(--color-inactive);
+    color: var(--color-text-muted);
     text-align: center;
     line-height: 1.6;
 }
