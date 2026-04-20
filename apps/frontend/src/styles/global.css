@@ -50,7 +50,7 @@ html.settings-page .dash-top-nav {
     top: 0;
 }
 
-@media (max-height: 780px) and (min-width: 1085px) {
+@media (max-height: 700px) and (min-width: 901px) {
     html.dash-page {
         overflow: hidden;
     }
@@ -60,7 +60,7 @@ html.settings-page .dash-top-nav {
     }
 }
 
-@media (max-width: 1085px) {
+@media (max-width: 900px) {
     html.dash-page {
         overflow-y: auto;
         overflow-x: hidden;
@@ -1718,7 +1718,7 @@ html.dash-page {
     flex: 1;
     max-width: 1600px;
     margin: 0 auto;
-    padding: 10px 40px 25px;
+    padding: clamp(6px, 1.2dvh, 10px) clamp(20px, 3vw, 40px) clamp(12px, 2dvh, 25px);
     width: 100%;
     box-sizing: border-box;
     display: flex;
@@ -1726,15 +1726,15 @@ html.dash-page {
     overflow: hidden;
 }
  .dash-greeting {
-     font-size: 1.8rem;
+     font-size: clamp(1.2rem, 2.2dvh, 1.8rem);
      font-weight: 800;
-     margin-bottom: 15px;
+     margin-bottom: clamp(6px, 1.2dvh, 15px);
 }
 
 .dash-grid-layout {
     display: grid;
-    grid-template-columns: 360px 1fr;
-    gap: 25px;
+    grid-template-columns: clamp(220px, 22vw, 360px) 1fr;
+    gap: clamp(14px, 1.8vw, 25px);
     flex: 1;
     min-height: 0;
 }
@@ -1750,20 +1750,20 @@ html.dash-page {
 .dash-right-col {
     display: flex;
     flex-direction: column;
-    gap: 25px;
+    gap: clamp(10px, 2dvh, 25px);
     height: 100%;
     min-height: 0;
 }
 .mail-row {
     flex: 1;
-    min-height: 0;
+    min-height: clamp(120px, 16dvh, 220px);
 }
 
 .dash-bottom-row {
     flex: 1;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
+    gap: clamp(10px, 1.5vw, 20px);
     height: auto;
     flex-shrink: 0;
     min-height: 0;
@@ -1788,7 +1788,7 @@ html.dash-page {
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    margin-bottom: 15px;
+    margin-bottom: clamp(8px, 1.2dvh, 15px);
 }
 
 .red-badge {
@@ -1816,9 +1816,9 @@ html.dash-page {
  .widget-tab {
      background: #e9ecef;
      width: max-content;
-     padding: 6px 18px 15px;
+     padding: clamp(4px, 0.7dvh, 6px) 18px clamp(10px, 1.5dvh, 15px);
      border-radius: 12px 12px 0 0;
-     font-size: 0.75rem;
+     font-size: clamp(0.65rem, 1.2dvh, 0.75rem);
      font-weight: 700;
      margin-left: 20px;
      transform: translateY(8px);
@@ -1832,8 +1832,8 @@ html.dash-page {
      backdrop-filter: blur(20px);
      -webkit-backdrop-filter: blur(20px);
      border: 1px solid var(--glass-border);
-     border-radius: 28px;
-     padding: 20px;
+     border-radius: clamp(18px, 2.5dvh, 28px);
+     padding: clamp(12px, 1.8dvh, 20px);
      box-shadow: 0 10px 40px rgba(31, 38, 135, 0.05);
      display: flex;
      flex-direction: column;
@@ -1848,7 +1848,7 @@ html.dash-page {
     border: 1px solid rgba(0, 0, 0, 0.05);
     box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.03);
     display: flex;
-    min-height: 220px;
+    min-height: clamp(100px, 16dvh, 220px);
 }
  .content-list {
      flex: 1;
@@ -1973,14 +1973,14 @@ html.dash-page {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 14px;
+    padding: clamp(8px, 1.2dvh, 14px) 14px;
     background: #f8fafc;
     border: 1px solid rgba(0, 0, 0, 0.05);
     border-radius: 10px;
-    margin-bottom: 12px;
+    margin-bottom: clamp(6px, 0.9dvh, 12px);
     position: relative;
     overflow: hidden;
-    min-height: 68px;
+    min-height: clamp(48px, 7dvh, 68px);
 }
 
 .link-content {
@@ -2142,8 +2142,8 @@ html.dash-page {
 }
 
 .donut-chart {
-    width: 170px;
-    height: 170px;
+    width: clamp(110px, 13vw, 170px);
+    height: clamp(110px, 13vw, 170px);
     border-radius: 50%;
     background: conic-gradient(var(--color-primary) calc(var(--used) * 1%), #e2e8f0 0deg);
     display: flex;
@@ -2154,8 +2154,8 @@ html.dash-page {
 }
 
 .donut-inner {
-    width: 130px;
-    height: 130px;
+    width: clamp(84px, 10vw, 130px);
+    height: clamp(84px, 10vw, 130px);
     background-color: #ffffff;
     border-radius: 50%;
     display: flex;
@@ -2166,7 +2166,7 @@ html.dash-page {
 }
 
 .donut-inner strong {
-    font-size: 1.3rem;
+    font-size: clamp(0.85rem, 1.8dvh, 1.3rem);
     font-weight: 800;
     color: var(--color-contrast);
 }
@@ -2180,8 +2180,8 @@ html.dash-page {
 
 .storage-legend {
     display: flex;
-    gap: 15px;
-    font-size: 0.9rem;
+    gap: clamp(8px, 1.2dvh, 15px);
+    font-size: clamp(0.7rem, 1.2dvh, 0.9rem);
     font-weight: 700;
     color: var(--color-contrast);
 }
@@ -2267,12 +2267,12 @@ html.dash-page {
 .bin-widget-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: clamp(8px, 1dvh, 12px);
+    padding: clamp(6px, 0.9dvh, 10px) 12px;
     background: #f8fafc;
     border: 1px solid rgba(0,0,0,0.05);
     border-radius: 10px;
-    margin-bottom: 8px;
+    margin-bottom: clamp(5px, 0.7dvh, 8px);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
@@ -2284,15 +2284,15 @@ html.dash-page {
 }
 
 .bin-widget-icon {
-    width: 34px;
-    height: 34px;
+    width: clamp(26px, 3.5dvh, 34px);
+    height: clamp(26px, 3.5dvh, 34px);
     background: rgba(149,29,42,0.08);
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--color-primary);
-    font-size: 1rem;
+    font-size: clamp(0.8rem, 1.4dvh, 1rem);
     flex-shrink: 0;
 }
 
@@ -2473,35 +2473,7 @@ html.dash-page {
     color: var(--color-primary);
 }
 
-@media (max-height: 800px) and (min-width: 1085px) {
-    .dash-container {
-        padding: 6px 40px 14px;
-    }
-    .dash-greeting {
-        font-size: 1.4rem;
-        margin-bottom: 8px;
-    }
-    .dash-grid-layout {
-        gap: 16px;
-    }
-    .dash-bottom-row {
-        gap: 14px;
-    }
-    .widget-tab {
-        padding: 4px 16px 12px;
-        font-size: 0.7rem;
-    }
-    .glass-panel {
-        padding: 14px;
-    }
-    .link-item {
-        padding: 10px 14px;
-        min-height: 56px;
-        margin-bottom: 8px;
-    }
-}
-
-@media (max-height: 780px) and (min-width: 1085px) {
+@media (max-height: 700px) and (min-width: 901px) {
     .dash-layout {
         position: relative;
         height: auto;
@@ -2521,7 +2493,6 @@ html.dash-page {
     }
     .mail-row {
         flex: none;
-        min-height: 180px;
     }
     .dash-bottom-row {
         flex: none;
@@ -2529,30 +2500,7 @@ html.dash-page {
     }
     .widget-wrapper {
         height: auto;
-        min-height: 200px;
-    }
-}
-
-@media (max-width: 1200px) {
-    .dash-container {
-        padding: 10px 24px 20px;
-    }
-    .dash-grid-layout {
-        grid-template-columns: 300px 1fr;
-        gap: 18px;
-    }
-    .dash-bottom-row {
-        gap: 14px;
-    }
-    .nav-center {
-        gap: 16px;
-    }
-    .nav-center a {
-        font-size: 0.82rem;
-    }
-    .dash-greeting {
-        font-size: 1.55rem;
-        margin-bottom: 12px;
+        min-height: 180px;
     }
 }
 
@@ -2560,7 +2508,9 @@ html.dash-page {
     .dash-hamburger { display: flex; }
     .nav-center { display: none; }
     .nav-right { display: none; }
+}
 
+@media (max-width: 900px) {
     .dash-layout {
         position: relative;
         height: auto;
