@@ -1848,12 +1848,13 @@ html.dash-page {
     border: 1px solid rgba(0, 0, 0, 0.05);
     box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.03);
     display: flex;
-    min-height: clamp(100px, 16dvh, 220px);
+    min-height: clamp(180px, 22dvh, 220px);
 }
  .content-list {
      flex: 1;
      display: flex;
      transition: filter 0.4s ease;
+     padding-bottom: 44px;
 }
  .empty-state {
      margin: auto;
@@ -1862,21 +1863,21 @@ html.dash-page {
      align-items: center;
      justify-content: center;
      text-align: center;
-     padding: 20px;
+     padding: clamp(10px, 1.8dvh, 20px);
 }
  .empty-icon-circle {
-     width: 60px;
-     height: 60px;
+     width: clamp(40px, 6.5dvh, 60px);
+     height: clamp(40px, 6.5dvh, 60px);
      background: rgba(255, 255, 255, 0.03);
      border-radius: 50%;
      display: flex;
      align-items: center;
      justify-content: center;
-     margin-bottom: 15px;
+     margin-bottom: clamp(8px, 1.4dvh, 15px);
      border: 1px solid rgba(255, 255, 255, 0.05);
 }
  .empty-state p {
-    font-size: 0.95rem;
+    font-size: clamp(0.78rem, 1.3dvh, 0.95rem);
     font-weight: 600;
     color: #1e293b;
     margin: 0;
@@ -1884,14 +1885,14 @@ html.dash-page {
 }
 
 .empty-state span {
-    font-size: 0.75rem;
+    font-size: clamp(0.62rem, 1dvh, 0.75rem);
     color: #1e293b;
     font-weight: 500;
     opacity: 0.5;
 }
 
 .empty-state i {
-    font-size: 2rem;
+    font-size: clamp(1.3rem, 2.2dvh, 2rem);
     color: #1e293b;
     opacity: 0.7;
 }
