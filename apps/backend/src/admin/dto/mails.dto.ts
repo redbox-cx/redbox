@@ -9,6 +9,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   Min,
   ValidateNested,
@@ -55,13 +56,22 @@ export class SendAdminMailDto {
   @MaxLength(50, { message: "senderId can't be longer than 50 characters" })
   senderId: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(/^(?:\*|[^@\s]+)@redbox\.cx$/i, {
+    message: "to must be either *@redbox.cx or username@redbox.cx",
+  })
+  to?: string;
+
+  // Legacy fields kept for compatibility with the current admin panel payload.
   @IsArray()
   @ArrayUnique()
   @IsEmail({}, { each: true, message: 'Each recipient must be a valid email address' })
-  recipients: string[];
+  recipients: string[] = [];
 
+  @IsOptional()
   @IsBoolean()
-  isBroadcast: boolean;
+  isBroadcast?: boolean;
 
   @IsString()
   @IsNotEmpty({ message: "Subject can't be empty" })
@@ -70,6 +80,7 @@ export class SendAdminMailDto {
 
   @IsString()
   @IsNotEmpty({ message: "Body can't be empty" })
+  @MaxLength(100000, { message: "Body can't be longer than 100000 characters" })
   body: string;
 
   @IsBoolean()

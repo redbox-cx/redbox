@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminMailsQueryDto, RecallAdminMailDto, SendAdminMailDto } from '../dto/mails.dto';
 import { AdminMailsService } from './admin-mails.service';
@@ -25,16 +26,16 @@ export class AdminMailsController {
   }
 
   @Get('mails')
-  getMails(@Query() query: AdminMailsQueryDto) {
+  async getMails(@Query() query: AdminMailsQueryDto) {
     return {
       message: 'Mails fetched successfully',
-      result: this.adminMailsService.getMails(query),
+      result: await this.adminMailsService.getMails(query),
     };
   }
 
   @Post('mails')
-  sendMail(@Body() dto: SendAdminMailDto) {
-    const result = this.adminMailsService.sendMail(dto);
+  async sendMail(@GetUserId() adminUserId: string, @Body() dto: SendAdminMailDto) {
+    const result = await this.adminMailsService.sendMail(adminUserId, dto);
     return {
       message: result.message,
       result,
@@ -42,8 +43,12 @@ export class AdminMailsController {
   }
 
   @Post('mails/:mailId/recall')
-  recallMail(@Param('mailId') mailId: string, @Body() dto: RecallAdminMailDto) {
-    const result = this.adminMailsService.recallMail(mailId, dto);
+  async recallMail(
+    @GetUserId() adminUserId: string,
+    @Param('mailId') mailId: string,
+    @Body() dto: RecallAdminMailDto,
+  ) {
+    const result = await this.adminMailsService.recallMail(adminUserId, mailId, dto);
     return {
       message: result.message,
       result,
@@ -51,8 +56,8 @@ export class AdminMailsController {
   }
 
   @Delete('mails/:mailId')
-  deleteMail(@Param('mailId') mailId: string) {
-    const result = this.adminMailsService.deleteMail(mailId);
+  async deleteMail(@GetUserId() adminUserId: string, @Param('mailId') mailId: string) {
+    const result = await this.adminMailsService.deleteMail(adminUserId, mailId);
     return {
       message: result.message,
       result,

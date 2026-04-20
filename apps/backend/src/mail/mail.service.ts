@@ -10,6 +10,28 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
 
 
+type MailboxUser = {
+  id: string;
+  publicKey: string;
+  username?: string;
+};
+
+type MailboxAttachmentInput = {
+  content: Buffer;
+  filename: string;
+  mimetype: string;
+  size: number;
+  storageKey?: string;
+};
+
+type StoredMailboxMailInput = {
+  from: string;
+  to: string;
+  subject: string;
+  content: string;
+  attachments?: MailboxAttachmentInput[];
+};
+
 @Injectable()
 export class MailService {
 
@@ -33,6 +55,27 @@ export class MailService {
     });
   }
 
+  async createInternalInboxMail(
+    user: MailboxUser & { username: string },
+    input: {
+      from: string;
+      subject: string;
+      body: string;
+    },
+  ) {
+    const mail = await this.storeMailboxMailForUser(user, {
+      from: input.from,
+      to: `${user.username}@redbox.cx`,
+      subject: input.subject,
+      content: input.body,
+      attachments: [],
+    });
+
+    return {
+      mailId: mail.id,
+    };
+  }
+
   private async getUserMailStorageUsed(userId: string) {
     const [mailAggregation, attachmentAggregation] = await Promise.all([
       this.prisma.mail.aggregate({
@@ -49,6 +92,47 @@ export class MailService {
       Number(mailAggregation._sum.contentSize ?? 0) +
       Number(attachmentAggregation._sum.size ?? 0)
     );
+  }
+
+  async deleteMailRecordById(
+    mailId: string,
+    options: { throwIfMissing?: boolean } = {},
+  ) {
+    const throwIfMissing = options.throwIfMissing ?? true;
+    const mail = await this.prisma.mail.findUnique({
+      where: { id: mailId },
+      include: { attachments: true },
+    });
+
+    if (!mail) {
+      if (throwIfMissing) {
+        throw new NotFoundException('Mail not found');
+      }
+
+      return { success: true, deleted: false };
+    }
+
+    const s3KeysToDelete = [
+      mail.storageKey,
+      ...mail.attachments.map((attachment) => attachment.storageKey),
+    ];
+
+    await Promise.all(
+      s3KeysToDelete.map((key) =>
+        this.s3
+          .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
+          .catch((error) => {
+            this.logger.error(`Failed to delete S3 object ${key}`, error);
+          }),
+      ),
+    );
+
+    await this.prisma.mail.delete({ where: { id: mailId } });
+
+    return {
+      success: true,
+      deleted: true,
+    };
   }
 
   async getUserMails(
@@ -250,22 +334,7 @@ export class MailService {
     });
     
     if (!mail) throw new NotFoundException('Mail not found');
-
-    // collect all s3 keys
-    const s3KeysToDelete = [
-      mail.storageKey, 
-      ...mail.attachments.map(att => att.storageKey)
-    ];
-
-    // delete the files from s3/minIO
-    await Promise.all(s3KeysToDelete.map(key => 
-      this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
-        .catch(err => this.logger.error(`Failed to delete S3 object ${key}`, err))
-    ));
-
-    // delete from db
-    await this.prisma.mail.delete({ where: { id: mailId } });
-    return { success: true };
+    return this.deleteMailRecordById(mail.id);
   }
 
 
@@ -421,6 +490,14 @@ export class MailService {
     const cleanEmail = emailMatch ? emailMatch[1] : dto.to;
     const username = cleanEmail.split('@')[0].toLowerCase().trim();
 
+    if (username.includes('*')) {
+      this.logger.warn(`Ignored external mail with broadcast recipient: ${cleanEmail}`);
+      return {
+        status: 'ignored',
+        reason: 'Broadcast delivery is only supported for internal admin mail',
+      };
+    }
+
     const user = await this.prisma.user.findUnique({ where: { username } });
     if (!user) return { status: 'ignored', reason: 'User not found' };
     if (user.status !== UserStatus.ACTIVE) {
@@ -441,15 +518,7 @@ export class MailService {
     const mailContent = parsed.html || parsed.textAsHtml || parsed.text || '(No content)';
     const contentSize = Buffer.byteLength(mailContent, 'utf8');
 
-    interface PreparedAttachment {
-      content: Buffer;
-      filename: string;
-      mimetype: string;
-      size: number;
-      storageKey: string;
-    }
-
-    const preparedAttachments: PreparedAttachment[] = (parsed.attachments ?? []).map(attachment => ({
+    const preparedAttachments: MailboxAttachmentInput[] = (parsed.attachments ?? []).map(attachment => ({
       content: attachment.content,
       filename: attachment.filename || 'unknown_file',
       mimetype: attachment.contentType || 'application/octet-stream',
@@ -469,13 +538,28 @@ export class MailService {
       return { status: 'ignored', reason: 'Mailbox quota exceeded' };
     }
 
+    const mail = await this.storeMailboxMailForUser(user, {
+      from: dto.from,
+      to: dto.to,
+      subject: parsed.subject || dto.subject || '(No subject)',
+      content: mailContent,
+      attachments: preparedAttachments,
+    });
+
+    this.logger.log(`Email from ${dto.from} for user '${username}' saved (Attachments: ${preparedAttachments.length})`);
+    return { status: 'success', mailId: mail.id };
+  }
+
+  private async storeMailboxMailForUser(user: MailboxUser, input: StoredMailboxMailInput) {
     const storageKey = `mail_${uuidv4()}.bin`;
+    const attachments = input.attachments ?? [];
+    const contentSize = Buffer.byteLength(input.content, 'utf8');
 
     const mailKey = randomBytes(32);
     const mailIv = randomBytes(16);
 
     const cipher = createCipheriv('aes-256-cbc', mailKey, mailIv);
-    const encryptedContent = Buffer.concat([cipher.update(mailContent, 'utf8'), cipher.final()]);
+    const encryptedContent = Buffer.concat([cipher.update(input.content, 'utf8'), cipher.final()]);
 
     await this.s3.send(new PutObjectCommand({
       Bucket: this.bucket,
@@ -484,24 +568,26 @@ export class MailService {
       ContentType: 'application/octet-stream',
     }));
 
-    // attachements
-    interface AttachmentData {
+    const attachmentData: Array<{
       filename: string;
       mimetype: string;
       size: number;
       storageKey: string;
-    }
-    const attachmentData: AttachmentData[] = [];
-    
-    if (preparedAttachments.length > 0) {
-      for (const attachment of preparedAttachments) {
+    }> = [];
+
+    if (attachments.length > 0) {
+      for (const attachment of attachments) {
+        const attachmentStorageKey = attachment.storageKey || `mail_att_${uuidv4()}.bin`;
         const attCipher = createCipheriv('aes-256-cbc', mailKey, mailIv);
-        const encryptedAtt = Buffer.concat([attCipher.update(attachment.content), attCipher.final()]);
+        const encryptedAttachment = Buffer.concat([
+          attCipher.update(attachment.content),
+          attCipher.final(),
+        ]);
 
         await this.s3.send(new PutObjectCommand({
           Bucket: this.bucket,
-          Key: attachment.storageKey,
-          Body: encryptedAtt,
+          Key: attachmentStorageKey,
+          Body: encryptedAttachment,
           ContentType: 'application/octet-stream',
         }));
 
@@ -509,31 +595,27 @@ export class MailService {
           filename: attachment.filename,
           mimetype: attachment.mimetype,
           size: attachment.size,
-          storageKey: attachment.storageKey
+          storageKey: attachmentStorageKey,
         });
       }
     }
 
     const encryptedMailKey = publicEncrypt(user.publicKey, mailKey).toString('hex');
 
-    const mail = await this.prisma.mail.create({
+    return this.prisma.mail.create({
       data: {
-        from: dto.from,
-        to: dto.to,
-        subject: parsed.subject || dto.subject || '(No subject)',
-        storageKey: storageKey,
+        from: input.from,
+        to: input.to,
+        subject: input.subject,
+        storageKey,
         userId: user.id,
-        encryptedMailKey: encryptedMailKey,
+        encryptedMailKey,
         mailKeyIv: mailIv.toString('hex'),
         contentSize,
-        
         attachments: {
-          create: attachmentData
-        }
-      }
+          create: attachmentData,
+        },
+      },
     });
-
-    this.logger.log(`Email from ${dto.from} for user '${username}' saved (Attachments: ${attachmentData.length})`);
-    return { status: 'success', mailId: mail.id };
   }
 }

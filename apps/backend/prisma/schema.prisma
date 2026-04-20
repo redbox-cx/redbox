@@ -54,6 +54,11 @@ enum ReportedContentType {
   BIN
 }
 
+enum InternalMailTargetType {
+  BROADCAST
+  USER
+}
+
 model User {
   id          String     @id @default(uuid())
   username    String     @unique @db.VarChar(50)
@@ -74,6 +79,7 @@ model User {
   deletionRequests UserDeletionRequest[]
   auditLogs      AdminAuditLog[]     @relation("AuditTargetUser")
   contentReports ContentReport[]     @relation("ReportedContentOwner")
+  internalMailDeliveries InternalMailDelivery[]
 
   encryptedMasterKey String? @db.Text
   masterKeyIv        String? @db.VarChar(50)
@@ -99,6 +105,9 @@ model AdminUser {
   auditLogs          AdminAuditLog[]    @relation("AuditActorAdmin")
   resolvedContentReports ContentReport[] @relation("ResolvedContentReports")
   resolvedBugReports     BugReport[]     @relation("ResolvedBugReports")
+  createdInternalMails   InternalMail[]  @relation("InternalMailCreatedBy")
+  recalledInternalMails  InternalMail[]  @relation("InternalMailRecalledBy")
+  deletedInternalMails   InternalMail[]  @relation("InternalMailDeletedBy")
 }
 
 model InviteCode {
@@ -177,6 +186,7 @@ model Mail {
 
   encryptedMailKey String @db.Text
   mailKeyIv        String @db.VarChar(50)
+  internalMailDelivery InternalMailDelivery?
 }
 
 model BlockedSender {
@@ -323,4 +333,70 @@ model BugReportAttachment {
   createdAt  DateTime  @default(now())
 
   @@index([bugReportId])
+}
+
+model InternalMail {
+  id                   String               @id @default(uuid())
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser?           @relation("InternalMailCreatedBy", fields: [createdByAdminUserId], references: [id], onDelete: SetNull)
+  senderId             String               @db.VarChar(50)
+  senderAddress        String               @db.VarChar(255)
+  senderLabel          String               @db.VarChar(100)
+  toAddress            String               @db.VarChar(255)
+  targetType           InternalMailTargetType
+  targetUsername       String?              @db.VarChar(50)
+  subject              String               @db.VarChar(255)
+  body                 String               @db.MediumText
+  isHtml               Boolean              @default(false)
+  template             String?              @db.VarChar(100)
+  createdAt            DateTime             @default(now())
+  recalledAt           DateTime?
+  recallReason         String?              @db.VarChar(500)
+  recalledByAdminUserId String?
+  recalledByAdminUser  AdminUser?           @relation("InternalMailRecalledBy", fields: [recalledByAdminUserId], references: [id], onDelete: SetNull)
+  deletedAt            DateTime?
+  deleteReason         String?              @db.VarChar(500)
+  deletedByAdminUserId String?
+  deletedByAdminUser   AdminUser?           @relation("InternalMailDeletedBy", fields: [deletedByAdminUserId], references: [id], onDelete: SetNull)
+  deliveries           InternalMailDelivery[]
+  attachments          InternalMailAttachment[]
+
+  @@index([createdAt])
+  @@index([senderId])
+  @@index([targetType])
+  @@index([targetUsername])
+  @@index([recalledAt])
+  @@index([deletedAt])
+  @@index([createdByAdminUserId])
+  @@index([recalledByAdminUserId])
+  @@index([deletedByAdminUserId])
+}
+
+model InternalMailDelivery {
+  id             String       @id @default(uuid())
+  internalMailId String
+  internalMail   InternalMail @relation(fields: [internalMailId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mailId         String?      @unique
+  mail           Mail?        @relation(fields: [mailId], references: [id], onDelete: SetNull)
+  deliveredAt    DateTime     @default(now())
+  recalledAt     DateTime?
+
+  @@unique([internalMailId, userId])
+  @@index([internalMailId])
+  @@index([userId])
+  @@index([recalledAt])
+}
+
+model InternalMailAttachment {
+  id             String       @id @default(uuid())
+  internalMailId String
+  internalMail   InternalMail @relation(fields: [internalMailId], references: [id], onDelete: Cascade)
+  name           String       @db.VarChar(255)
+  size           Int
+  type           String       @db.VarChar(100)
+  createdAt      DateTime     @default(now())
+
+  @@index([internalMailId])
 }
