@@ -199,7 +199,8 @@ html.menu-open body {
 }
 
 .submenu-icon {
-    background-color: var(--color-primary);
+    background-color: rgba(0, 0, 0, 0.25);
+    border: none;
     width: 44px;
     height: 44px;
     display: flex;
@@ -556,21 +557,22 @@ html.menu-open body {
 }
 
 .service-icon-box {
-    width: 60px;
-    height: 60px;
+    width: 65px;
+    height: 65px;
     border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 20px;
     margin-top: -45px; 
-    background-color: var(--color-primary);
+    background-color: rgba(0, 0, 0, 0.25);
+    border: none;
     box-shadow: 0 8px 15px rgba(0,0,0,0.1);
 }
 
 .service-icon-img {
-    width: 30px;
-    height: 30px;
+    width: 58px;
+    height: 58px;
 }
 
 .service-title {
@@ -1183,6 +1185,11 @@ html.menu-open body {
     align-items: center;
     gap: 25px;
     padding: 25px 30px;
+    border: none;
+    background: none;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
     background-color: var(--color-surface);
     border-radius: 16px;
     text-decoration: none;
@@ -1649,6 +1656,14 @@ html.dash-page {
 .user-dropdown-wrapper:hover {
     background: #ffffff;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.dropdown-arrow {
+    transition: transform 0.3s ease;
+}
+
+.dropdown-arrow.open {
+    transform: rotate(180deg);
 }
 
 .user-avatar-dash {
@@ -3329,6 +3344,93 @@ html.dash-page {
 .report-reason-input:focus {
     outline: none;
     border-color: var(--color-primary);
+}
+
+.char-counter {
+    position: absolute;
+    bottom: 8px;
+    right: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-inactive);
+    pointer-events: none;
+}
+
+.char-counter--limit {
+    color: var(--color-primary);
+}
+
+.bug-attach-zone {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px dashed rgba(0,0,0,0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-inactive);
+    transition: border-color 0.15s, color 0.15s;
+    user-select: none;
+}
+
+.bug-attach-zone:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.bug-attach-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bug-attach-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    background: rgba(0,0,0,0.03);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.bug-attach-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    color: var(--color-contrast);
+}
+
+.bug-attach-size {
+    font-size: 0.72rem;
+    color: var(--color-inactive);
+    flex-shrink: 0;
+}
+
+.bug-attach-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-inactive);
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 4px;
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+
+.bug-attach-remove:hover {
+    color: var(--color-primary);
 }
 
 .report-pw-verified {
