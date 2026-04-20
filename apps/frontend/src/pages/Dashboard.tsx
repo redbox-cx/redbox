@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { MailService } from "../services/MailService";
+import { MailService, type MailListItem } from "../services/MailService";
 import { TopBar } from "../components/dashboard/TopBar";
 import { LinksWidget } from "../components/dashboard/LinksWidget";
 import { StorageWidget } from "../components/dashboard/StorageWidget";
@@ -9,7 +9,7 @@ import { BinsWidget } from "../components/dashboard/BinsWidget";
 
 export function DashBoard() {
     const { user } = useAuth();
-    const [unreadMail, setUnreadMail] = useState(0);
+    const [unreadMails, setUnreadMails] = useState<MailListItem[]>([]);
     const [mailStorageMb, setMailStorageMb] = useState(0);
 
     useEffect(() => {
@@ -18,8 +18,8 @@ export function DashBoard() {
     }, []);
 
     useEffect(() => {
-        MailService.getAll(100, 0)
-            .then(r => setUnreadMail(r.mails.filter(m => !m.isRead).length))
+        MailService.getAll(100, 0, 'unread')
+            .then(r => setUnreadMails(r.mails.filter(m => !m.isRead)))
             .catch(() => {});
         MailService.getStorage()
             .then(s => setMailStorageMb(s.usedMb))
@@ -39,7 +39,7 @@ export function DashBoard() {
                     </div>
                     <div className="dash-right-col">
                         <div className="mail-row">
-                            <NotificationWidget title="Mail Notifications" icon="bi bi-envelope" count={unreadMail} storageMb={mailStorageMb} />
+                            <NotificationWidget title="Mail Notifications" icon="bi bi-envelope" count={unreadMails.length} storageMb={mailStorageMb} mails={unreadMails} />
 
                         </div>
                         <div className="dash-bottom-row">

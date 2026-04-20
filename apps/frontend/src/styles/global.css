@@ -1871,6 +1871,103 @@ html.dash-page {
     color: var(--color-inactive);
 }
 
+.notif-mail-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.1) transparent;
+    padding-bottom: calc(44px + 52px);
+}
+
+.notif-mail-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    text-decoration: none;
+    transition: background 0.15s;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.notif-mail-item:last-of-type {
+    border-bottom: none;
+}
+
+.notif-mail-item:hover {
+    background: rgba(0,0,0,0.04);
+}
+
+.notif-mail-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.notif-mail-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.notif-mail-from {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.notif-mail-subject {
+    font-size: 0.71rem;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.notif-mail-time {
+    font-size: 0.67rem;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.notif-mail-more {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    padding: 8px 6px;
+    text-decoration: none;
+    display: block;
+    transition: background 0.15s;
+}
+
+.notif-mail-more:hover {
+    background: rgba(0,0,0,0.04);
+}
+
+.notif-mail-end {
+    display: block;
+    text-align: center;
+    font-size: 0.72rem;
+    color: #94a3b8;
+    padding: 8px 6px;
+    letter-spacing: 0.02em;
+}
+
  .widget-tab {
      background: #e9ecef;
      width: max-content;
@@ -1900,19 +1997,25 @@ html.dash-page {
 .content-window {
     position: relative;
     flex: 1;
+    min-height: 0;
     background-color:#f1f5f9;
     border-radius: 20px;
     overflow: hidden;
     border: 1px solid rgba(0, 0, 0, 0.05);
     box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.03);
     display: flex;
-    min-height: clamp(180px, 22dvh, 220px);
 }
+
+.content-window--fixed {
+    flex: 0 0 clamp(180px, 22dvh, 220px);
+}
+
  .content-list {
      flex: 1;
      display: flex;
      transition: filter 0.4s ease;
-     padding-bottom: 44px;
+     overflow: hidden;
+     min-height: 0;
 }
  .empty-state {
      margin: auto;

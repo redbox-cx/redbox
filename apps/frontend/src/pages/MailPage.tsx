@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { TopBar } from '../components/dashboard/TopBar';
 import { useAuth } from '../context/AuthContext';
 import { MailService, type MailListItem, type MailDetail, type MailFolder, type MailAttachment } from '../services/MailService';
@@ -94,6 +94,7 @@ function PageButtons({ page, total, onChange }: { page: number; total: number; o
 
 export function MailPage() {
     const { user } = useAuth();
+    const location = useLocation();
     const [mails, setMails] = useState<MailListItem[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -152,6 +153,18 @@ export function MailPage() {
             .then(s => setMailStorageMb(s.usedMb))
             .catch(() => {});
     }, []);
+
+    useEffect(() => {
+        const openMailId = (location.state as any)?.openMailId;
+        if (!openMailId) return;
+        setLoadingDetail(true);
+        setMobileView('detail');
+        MailService.getById(openMailId).then(detail => {
+            setSelected(detail);
+            setMails(prev => prev.map(m => m.id === openMailId ? { ...m, isRead: true } : m));
+            MailService.setReadStatus(openMailId, true).catch(() => {});
+        }).catch(() => {}).finally(() => setLoadingDetail(false));
+    }, [location.state]);
 
     const displayed = useMemo(() => {
         return [...mails].sort((a, b) => {
