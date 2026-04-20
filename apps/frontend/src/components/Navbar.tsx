@@ -1,5 +1,8 @@
 import { useState } from "react";
 import logoRed from "@/assets/images/logo_red.png"
+import securesphereIcon from "@/assets/svg/securesphere-logo.svg"
+import mailIcon from "@/assets/svg/mail-logo.svg"
+import toolsetIcon from "@/assets/svg/toolset-logo.svg"
 import "@/styles/global.css"
 
 const menuItems = [
@@ -7,10 +10,9 @@ const menuItems = [
     name: "Services",
     path: "#",
     submenu: [
-      { name: "SecureSphere", path: "#", icon: logoRed },
-      { name: "Email", path: "#", icon: logoRed },
-      { name: "ToolSet", path: "#", icon: logoRed },
-      { name: "ToolSet", path: "#", icon: logoRed },
+      { name: "SecureSphere", path: "#", icon: securesphereIcon },
+      { name: "Email", path: "#", icon: mailIcon },
+      { name: "ToolSet", path: "#", icon: toolsetIcon },
     ],
   },
   { name: "About", path: "/about" },
