@@ -1,6 +1,6 @@
 import { motion } from "motion/react"
 import logoRed from "@/assets/images/logo_red.png"
-import DecryptedText from "@/components/DecryptedText"
+import DecryptedText from "./DecryptedText"
 
 const fadeUp = {
     hidden: { opacity: 0, y: 40 },
@@ -28,7 +28,7 @@ export function Hero() {
                         revealDirection="start"
                         speed={110}
                         maxIterations={14}
-                        characters="abcdefghijklmnopqrstuvwxyz"
+                        characters="+*%&/()?!{$[]}"
                     /><span className="dot">.</span>
                 </motion.h1>
 

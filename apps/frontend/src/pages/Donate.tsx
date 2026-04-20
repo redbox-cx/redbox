@@ -1,8 +1,23 @@
+import { useEffect } from "react";
 import { MainLayout } from "../components/MainLayout";
 import { Footer } from "../components/Footer";
 import { DonationMethods } from "../components/DonationMethods";
 
 export function Donate() {
+    useEffect(() => {
+        const sections = document.querySelectorAll('.donation-intro, .donation-content');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('page-section-visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.12 });
+        sections.forEach(s => observer.observe(s));
+        return () => observer.disconnect();
+    }, []);
+
     return (
         <div className="page-wrapper">
             <MainLayout>

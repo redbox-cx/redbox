@@ -1,10 +1,25 @@
+import { useEffect } from 'react';
 import { MainLayout } from "../components/MainLayout";
 import { Footer } from "../components/Footer";
-import aboutImg1 from "@/assets/images/about.jpg"; 
+import aboutImg1 from "@/assets/images/about.jpg";
 import aboutImg2 from "@/assets/images/about2.jpg";
 import aboutImg3 from "@/assets/images/about3.jpg";
 
 export function About() {
+    useEffect(() => {
+        const sections = document.querySelectorAll('.about-zigzag');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('about-visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.12 });
+        sections.forEach(s => observer.observe(s));
+        return () => observer.disconnect();
+    }, []);
+
     return (
         <div className="page-wrapper">
             <MainLayout>
@@ -38,7 +53,7 @@ export function About() {
                             </p>
                         </div>
                         <div className="about-visual">
-                            <img src={aboutImg2} alt="Philosophy" className="about-image" />
+                            <img src={aboutImg3} alt="Philosophy" className="about-image" />
                         </div>
                     </section>
                     <section className="about-zigzag">
@@ -52,7 +67,7 @@ export function About() {
                             </p>
                         </div>
                         <div className="about-visual">
-                            <img src={aboutImg3} alt="Team" className="about-image" />
+                            <img src={aboutImg2} alt="Team" className="about-image" />
                         </div>
                     </section>
                 </div>

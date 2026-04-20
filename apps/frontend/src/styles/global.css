@@ -50,7 +50,7 @@ html.settings-page .dash-top-nav {
     top: 0;
 }
 
-@media (max-height: 700px) and (min-width: 901px) {
+ @media (max-height: 700px) and (min-width: 901px) {
     html.dash-page {
         overflow: hidden;
     }
@@ -989,6 +989,27 @@ html.menu-open body {
     align-items: center;
     justify-content: space-between;
     gap: 80px;
+    opacity: 0;
+    transform: translateY(48px);
+    transition: opacity 1.1s cubic-bezier(0.22, 1, 0.36, 1), transform 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.about-zigzag.about-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.about-zigzag.about-visible .about-text {
+    animation: aboutSlideIn 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.about-zigzag.about-visible .about-visual {
+    animation: aboutSlideIn 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.18s both;
+}
+
+@keyframes aboutSlideIn {
+    from { opacity: 0; transform: translateY(28px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .about-zigzag.reverse {
@@ -1157,6 +1178,28 @@ html.menu-open body {
 
 .contact-intro {
     margin-bottom: 60px;
+}
+
+.contact-intro,
+.contact-content,
+.donation-intro,
+.donation-content {
+    opacity: 0;
+    transform: translateY(48px);
+    transition: opacity 1.1s cubic-bezier(0.22, 1, 0.36, 1), transform 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.contact-content {
+    transition-delay: 0.12s;
+}
+
+.donation-content {
+    transition-delay: 0.12s;
+}
+
+.page-section-visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .contact-title {

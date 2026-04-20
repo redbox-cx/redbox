@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MainLayout } from "../components/MainLayout";
 import { Footer } from "../components/Footer";
 import { ContactMethods } from "../components/ContactMethods";
@@ -6,6 +6,20 @@ import { BugReportModal } from "../components/BugReportModal";
 
 export function Contact() {
     const [showBugModal, setShowBugModal] = useState(false);
+
+    useEffect(() => {
+        const sections = document.querySelectorAll('.contact-intro, .contact-content');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('page-section-visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.12 });
+        sections.forEach(s => observer.observe(s));
+        return () => observer.disconnect();
+    }, []);
 
     return (
         <div className="page-wrapper">
