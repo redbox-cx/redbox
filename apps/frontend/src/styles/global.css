@@ -2016,6 +2016,7 @@ html.dash-page {
      transition: filter 0.4s ease;
      overflow: hidden;
      min-height: 0;
+     padding-bottom: 44px;
 }
  .empty-state {
      margin: auto;
