@@ -1,6 +1,16 @@
 import apiClient from '../api/apiClient';
 
 export const ReportService = {
+    async reportBug(dto: { description: string; contactEmail?: string; attachments?: File[] }): Promise<void> {
+        const form = new FormData();
+        form.append('description', dto.description);
+        if (dto.contactEmail?.trim()) form.append('contactEmail', dto.contactEmail.trim());
+        dto.attachments?.forEach(f => form.append('attachments', f));
+        await apiClient.post('/reports/bugs', form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
     async reportContent(dto: { link: string; reason: string; reporterEmail?: string; contentPassword?: string }): Promise<void> {
         const { contentPassword, link, ...rest } = dto;
         const hashIndex = link.indexOf('#');
