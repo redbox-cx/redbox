@@ -1,7 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { Prisma, ReportedContentType } from '@prisma/client';
 import { PrismaService } from 'src/prisma.service';
+import { CreateBugReportDto } from './dto/create-bug-report.dto';
 import { CreateContentReportDto } from './dto/create-content-report.dto';
 import { encryptReportedContentPassword } from './report-content-password.util';
 
@@ -18,9 +21,30 @@ type ResolvedContentTarget = {
   binId: string | null;
 };
 
+type PreparedBugAttachment = {
+  filename: string;
+  mimetype: string;
+  size: number;
+  storageKey: string;
+};
+
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prismaService: PrismaService) {}
+  private readonly logger = new Logger(ReportsService.name);
+  private readonly s3: S3Client;
+  private readonly bucket = process.env.S3_BUCKET_FILES || 'redbox-files';
+
+  constructor(private readonly prismaService: PrismaService) {
+    this.s3 = new S3Client({
+      endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
+      region: 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
+        secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
+      },
+      forcePathStyle: true,
+    });
+  }
 
   async createContentReport(dto: CreateContentReportDto) {
     const normalizedLink = dto.link.trim();
@@ -53,6 +77,60 @@ export class ReportsService {
       reportId: report.id,
       createdAt: report.createdAt.toISOString(),
     };
+  }
+
+  async createBugReport(dto: CreateBugReportDto, attachments: Express.Multer.File[] = []) {
+    const normalizedDescription = dto.description.trim();
+    const contactEmail = dto.contactEmail?.trim().toLowerCase() || null;
+    const uploadedStorageKeys: string[] = [];
+    const preparedAttachments: PreparedBugAttachment[] = [];
+
+    this.assertBugAttachmentsAreValid(attachments);
+
+    try {
+      for (const attachment of attachments) {
+        const storageKey = `bug_reports/${randomUUID()}.bin`;
+
+        await this.s3.send(
+          new PutObjectCommand({
+            Bucket: this.bucket,
+            Key: storageKey,
+            Body: attachment.buffer,
+            ContentType: attachment.mimetype,
+          }),
+        );
+
+        uploadedStorageKeys.push(storageKey);
+        preparedAttachments.push({
+          filename: attachment.originalname || 'attachment',
+          mimetype: attachment.mimetype,
+          size: attachment.size,
+          storageKey,
+        });
+      }
+
+      const report = await this.prismaService.bugReport.create({
+        data: {
+          description: normalizedDescription,
+          contactEmail,
+          attachments: {
+            create: preparedAttachments,
+          },
+        },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      });
+
+      return {
+        reportId: report.id,
+        createdAt: report.createdAt.toISOString(),
+      };
+    } catch (error) {
+      await this.deleteUploadedBugAttachments(uploadedStorageKeys);
+      throw error;
+    }
   }
 
   private async resolveContentTarget(
@@ -243,5 +321,37 @@ export class ReportsService {
     } catch {
       return false;
     }
+  }
+
+  private assertBugAttachmentsAreValid(attachments: Express.Multer.File[]) {
+    for (const attachment of attachments) {
+      if (!attachment.mimetype) {
+        throw new BadRequestException('Each attachment must include a valid MIME type');
+      }
+
+      const isAllowedType =
+        attachment.mimetype.startsWith('image/') || attachment.mimetype.startsWith('video/');
+
+      if (!isAllowedType) {
+        throw new BadRequestException('Bug report attachments must be images or videos');
+      }
+    }
+  }
+
+  private async deleteUploadedBugAttachments(keys: string[]) {
+    await Promise.all(
+      keys.map((key) =>
+        this.s3
+          .send(
+            new DeleteObjectCommand({
+              Bucket: this.bucket,
+              Key: key,
+            }),
+          )
+          .catch((error) => {
+            this.logger.warn(`Failed to delete bug report attachment ${key}: ${String(error)}`);
+          }),
+      ),
+    );
   }
 }

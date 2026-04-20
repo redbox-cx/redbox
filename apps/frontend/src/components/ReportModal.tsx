@@ -15,7 +15,7 @@ export function ReportModal({ onClose, isPasswordProtected, knownPassword }: Pro
     const [error, setError] = useState('');
     const [submitted, setSubmitted] = useState(false);
 
-    const link = window.location.href.split('#')[0];
+    const link = window.location.href;
     const passwordLocked = isPasswordProtected && !!knownPassword;
 
     const handleSubmit = async (e: React.FormEvent) => {

@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { AuditActorType, Prisma } from '@prisma/client';
+import { Readable } from 'stream';
 import { PrismaService } from 'src/prisma.service';
 import {
-  ADMIN_BUG_REPORTS,
   ADMIN_REPORTS_HISTORY,
   type AdminBugReport,
 } from '../admin.data';
@@ -23,36 +24,59 @@ function clone<T>(value: T): T {
 
 @Injectable()
 export class AdminReportsService {
-  private bugReports: AdminBugReport[] = clone(ADMIN_BUG_REPORTS);
+  private readonly s3: S3Client;
+  private readonly bugAttachmentsBucket = process.env.S3_BUCKET_FILES || 'redbox-files';
 
   constructor(
     private readonly prismaService: PrismaService,
     private readonly adminUsersService: AdminUsersService,
-  ) {}
-
-  async getOpenReportsCount() {
-    const contentReportsOpen = await this.prismaService.contentReport.count({
-      where: { resolvedAt: null },
+  ) {
+    this.s3 = new S3Client({
+      endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
+      region: 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
+        secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
+      },
+      forcePathStyle: true,
     });
-
-    return contentReportsOpen + this.bugReports.length;
   }
 
-  async getReportsSummary() {
-    const [contentReportsOpen, archivedReports] = await Promise.all([
+  async getOpenReportsCount() {
+    const [contentReportsOpen, bugReportsOpen] = await Promise.all([
       this.prismaService.contentReport.count({
         where: { resolvedAt: null },
       }),
-      this.prismaService.contentReport.count({
-        where: { resolvedAt: { not: null } },
+      this.prismaService.bugReport.count({
+        where: { resolvedAt: null },
       }),
     ]);
 
+    return contentReportsOpen + bugReportsOpen;
+  }
+
+  async getReportsSummary() {
+    const [contentReportsOpen, contentReportsArchived, bugReportsOpen, bugReportsArchived] =
+      await Promise.all([
+        this.prismaService.contentReport.count({
+          where: { resolvedAt: null },
+        }),
+        this.prismaService.contentReport.count({
+          where: { resolvedAt: { not: null } },
+        }),
+        this.prismaService.bugReport.count({
+          where: { resolvedAt: null },
+        }),
+        this.prismaService.bugReport.count({
+          where: { resolvedAt: { not: null } },
+        }),
+      ]);
+
     return {
-      openReports: contentReportsOpen + this.bugReports.length,
+      openReports: contentReportsOpen + bugReportsOpen,
       contentReportsOpen,
-      bugReportsOpen: this.bugReports.length,
-      archivedReports,
+      bugReportsOpen,
+      archivedReports: contentReportsArchived + bugReportsArchived,
       history: clone(ADMIN_REPORTS_HISTORY),
     };
   }
@@ -101,6 +125,8 @@ export class AdminReportsService {
 
     return reports.map((report) => {
       const resource = report.file ?? report.bin;
+      const contentPassword = decryptReportedContentPassword(report.contentPasswordEncrypted);
+      const reviewLink = this.buildReviewLink(report.contentLink, contentPassword);
 
       return {
         id: report.id,
@@ -110,12 +136,15 @@ export class AdminReportsService {
           joinDate: report.reportedUser.createdAt.toISOString(),
         },
         timestamp: report.createdAt.toISOString(),
-        link: report.contentLink,
+        link: reviewLink,
+        reviewLink,
+        rawLink: report.contentLink,
+        hasDecryptionKey: this.hasDecryptionKey(report.contentLink),
         fileSize: resource?.size ?? 0,
         fileCreationDate: resource?.createdAt?.toISOString() ?? report.createdAt.toISOString(),
         reason: report.reason,
         reporterEmail: report.reporterEmail,
-        contentPassword: decryptReportedContentPassword(report.contentPasswordEncrypted),
+        contentPassword,
         hasContentPassword: Boolean(report.contentPasswordEncrypted),
         fileId: report.fileId ?? report.binId ?? undefined,
         contentType: report.contentType.toLowerCase(),
@@ -123,35 +152,129 @@ export class AdminReportsService {
     });
   }
 
-  getBugReports(query: OffsetPaginationQueryDto) {
-    return this.paginateArray(this.bugReports, query);
-  }
-
-  async getArchivedReports(query: OffsetPaginationQueryDto) {
-    const archivedReports = await this.prismaService.contentReport.findMany({
-      where: {
-        resolvedAt: { not: null },
-      },
+  async getBugReports(query: OffsetPaginationQueryDto) {
+    const reports = await this.prismaService.bugReport.findMany({
+      where: { resolvedAt: null },
       include: {
-        resolvedByAdminUser: {
-          select: {
-            username: true,
-          },
+        attachments: {
+          orderBy: { createdAt: 'asc' },
         },
       },
-      orderBy: { resolvedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
       skip: query.offset,
       take: query.limit,
     });
 
-    return archivedReports.map((report) => ({
+    return reports.map((report): AdminBugReport & {
+      attachmentItems: Array<{
+        id: string;
+        filename: string;
+        mimetype: string;
+        size: number;
+        downloadUrl: string;
+      }>;
+    } => ({
       id: report.id,
-      originalType: report.contentType === 'FILE' ? 'Upload report' : 'Bin report',
-      subject: report.contentLink,
-      timestamp: report.resolvedAt?.toISOString() ?? report.createdAt.toISOString(),
-      resolvedBy: report.resolvedByAdminUser?.username ?? 'Admin',
-      actionTaken: report.actionTaken ?? 'Report resolved',
+      subject: this.buildBugReportSubject(report.description),
+      timestamp: report.createdAt.toISOString(),
+      description: report.description,
+      attachments: report.attachments.map((attachment) => attachment.filename),
+      attachmentItems: report.attachments.map((attachment) => ({
+        id: attachment.id,
+        filename: attachment.filename,
+        mimetype: attachment.mimetype,
+        size: attachment.size,
+        downloadUrl: `/admin/reports/bugs/${report.id}/attachments/${attachment.id}`,
+      })),
+      reporterEmail: report.contactEmail,
     }));
+  }
+
+  async getArchivedReports(query: OffsetPaginationQueryDto) {
+    const [archivedContentReports, archivedBugReports] = await Promise.all([
+      this.prismaService.contentReport.findMany({
+        where: {
+          resolvedAt: { not: null },
+        },
+        include: {
+          resolvedByAdminUser: {
+            select: {
+              username: true,
+            },
+          },
+        },
+      }),
+      this.prismaService.bugReport.findMany({
+        where: {
+          resolvedAt: { not: null },
+        },
+        include: {
+          resolvedByAdminUser: {
+            select: {
+              username: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const combinedItems = [
+      ...archivedContentReports.map((report) => ({
+        id: report.id,
+        originalType: report.contentType === 'FILE' ? 'Upload report' : 'Bin report',
+        subject: report.contentLink,
+        timestamp: report.resolvedAt?.toISOString() ?? report.createdAt.toISOString(),
+        resolvedBy: report.resolvedByAdminUser?.username ?? 'Admin',
+        actionTaken: report.actionTaken ?? 'Report resolved',
+      })),
+      ...archivedBugReports.map((report) => ({
+        id: report.id,
+        originalType: 'Bug report',
+        subject: this.buildBugReportSubject(report.description),
+        timestamp: report.resolvedAt?.toISOString() ?? report.createdAt.toISOString(),
+        resolvedBy: report.resolvedByAdminUser?.username ?? 'Admin',
+        actionTaken: report.actionTaken ?? 'Bug report resolved',
+      })),
+    ]
+      .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
+      .slice(query.offset, query.offset + query.limit);
+
+    return combinedItems;
+  }
+
+  async downloadBugReportAttachment(reportId: string, attachmentId: string) {
+    const attachment = await this.prismaService.bugReportAttachment.findFirst({
+      where: {
+        id: attachmentId,
+        bugReportId: reportId,
+      },
+      select: {
+        filename: true,
+        mimetype: true,
+        storageKey: true,
+      },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Bug report attachment not found');
+    }
+
+    const object = await this.s3.send(
+      new GetObjectCommand({
+        Bucket: this.bugAttachmentsBucket,
+        Key: attachment.storageKey,
+      }),
+    );
+
+    if (!object.Body) {
+      throw new NotFoundException('Bug report attachment file not found');
+    }
+
+    return {
+      filename: attachment.filename,
+      mimetype: attachment.mimetype,
+      stream: object.Body as Readable,
+    };
   }
 
   async deleteReportedContent(
@@ -204,7 +327,7 @@ export class AdminReportsService {
         targetUserId: report.reportedUserId,
         action: 'report_content_deleted',
         reason: dto.reason,
-        meta: this.buildReportAuditMeta(report, {
+        meta: this.buildContentReportAuditMeta(report, {
           deletedContentType: report.contentType.toLowerCase(),
           deletedContentId: report.fileId ?? report.binId,
         }),
@@ -219,7 +342,8 @@ export class AdminReportsService {
 
   async banReportedUser(reportId: string, dto: BanReportedUserDto, adminUserId: string) {
     const report = await this.findOpenContentReportOrThrow(reportId);
-    const durationDays = dto.duration === '30d' ? 30 : dto.duration === 'custom' ? dto.customDays : undefined;
+    const durationDays =
+      dto.duration === '30d' ? 30 : dto.duration === 'custom' ? dto.customDays : undefined;
 
     await this.adminUsersService.updateUserStatus(adminUserId, report.reportedUserId, {
       status: 'banned',
@@ -235,7 +359,7 @@ export class AdminReportsService {
         targetUserId: report.reportedUserId,
         action: 'report_user_banned',
         reason: dto.reason,
-        meta: this.buildReportAuditMeta(report, {
+        meta: this.buildContentReportAuditMeta(report, {
           banDuration: dto.duration,
           customDays: dto.duration === 'custom' ? dto.customDays : null,
           durationDays: durationDays ?? null,
@@ -284,7 +408,7 @@ export class AdminReportsService {
           targetUserId: contentReport.reportedUserId,
           action: 'report_resolved',
           reason: dto.reason,
-          meta: this.buildReportAuditMeta(contentReport),
+          meta: this.buildContentReportAuditMeta(contentReport),
         });
       });
 
@@ -294,9 +418,38 @@ export class AdminReportsService {
       };
     }
 
-    const bugReport = this.bugReports.find((report) => report.id === reportId);
+    const bugReport = await this.prismaService.bugReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        description: true,
+        resolvedAt: true,
+      },
+    });
+
     if (bugReport) {
-      this.bugReports = this.bugReports.filter((report) => report.id !== reportId);
+      if (bugReport.resolvedAt) {
+        throw new BadRequestException('Report is already archived');
+      }
+
+      await this.prismaService.$transaction(async (prisma) => {
+        await prisma.bugReport.update({
+          where: { id: reportId },
+          data: {
+            resolvedAt: new Date(),
+            actionTaken: dto.reason,
+            resolvedByAdminUserId: adminUserId,
+          },
+        });
+
+        await this.createAuditLog(prisma, {
+          adminUserId,
+          action: 'bug_report_resolved',
+          reason: dto.reason,
+          meta: this.buildBugReportAuditMeta(bugReport),
+        });
+      });
+
       return {
         success: true,
         message: 'Report resolved and archived',
@@ -320,37 +473,75 @@ export class AdminReportsService {
       },
     });
 
-    if (!report) {
-      throw new NotFoundException('Report not found');
-    }
+    if (report) {
+      if (!report.resolvedAt) {
+        throw new BadRequestException('Report is already open');
+      }
 
-    if (!report.resolvedAt) {
-      throw new BadRequestException('Report is already open');
-    }
+      await this.prismaService.$transaction(async (prisma) => {
+        await prisma.contentReport.update({
+          where: { id: reportId },
+          data: {
+            resolvedAt: null,
+            actionTaken: null,
+            resolvedByAdminUserId: null,
+          },
+        });
 
-    await this.prismaService.$transaction(async (prisma) => {
-      await prisma.contentReport.update({
-        where: { id: reportId },
-        data: {
-          resolvedAt: null,
-          actionTaken: null,
-          resolvedByAdminUserId: null,
-        },
+        await this.createAuditLog(prisma, {
+          adminUserId,
+          targetUserId: report.reportedUserId,
+          action: 'report_reopened',
+          reason: dto.reason,
+          meta: this.buildContentReportAuditMeta(report),
+        });
       });
 
-      await this.createAuditLog(prisma, {
-        adminUserId,
-        targetUserId: report.reportedUserId,
-        action: 'report_reopened',
-        reason: dto.reason,
-        meta: this.buildReportAuditMeta(report),
-      });
+      return {
+        success: true,
+        message: 'Report reopened successfully',
+      };
+    }
+
+    const bugReport = await this.prismaService.bugReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        description: true,
+        resolvedAt: true,
+      },
     });
 
-    return {
-      success: true,
-      message: 'Report reopened successfully',
-    };
+    if (bugReport) {
+      if (!bugReport.resolvedAt) {
+        throw new BadRequestException('Report is already open');
+      }
+
+      await this.prismaService.$transaction(async (prisma) => {
+        await prisma.bugReport.update({
+          where: { id: reportId },
+          data: {
+            resolvedAt: null,
+            actionTaken: null,
+            resolvedByAdminUserId: null,
+          },
+        });
+
+        await this.createAuditLog(prisma, {
+          adminUserId,
+          action: 'bug_report_reopened',
+          reason: dto.reason,
+          meta: this.buildBugReportAuditMeta(bugReport),
+        });
+      });
+
+      return {
+        success: true,
+        message: 'Report reopened successfully',
+      };
+    }
+
+    throw new NotFoundException('Report not found');
   }
 
   private async findOpenContentReportOrThrow(reportId: string) {
@@ -378,7 +569,7 @@ export class AdminReportsService {
     return report;
   }
 
-  private buildReportAuditMeta(
+  private buildContentReportAuditMeta(
     report: {
       id: string;
       contentType: 'FILE' | 'BIN' | string;
@@ -396,6 +587,69 @@ export class AdminReportsService {
       binId: report.binId,
       ...extra,
     };
+  }
+
+  private buildBugReportAuditMeta(
+    report: {
+      id: string;
+      description: string;
+    },
+    extra: Record<string, unknown> = {},
+  ): Prisma.InputJsonValue {
+    return {
+      reportId: report.id,
+      reportType: 'bug',
+      subject: this.buildBugReportSubject(report.description),
+      ...extra,
+    };
+  }
+
+  private buildBugReportSubject(description: string) {
+    const compactDescription = description.replace(/\s+/g, ' ').trim();
+
+    if (!compactDescription) {
+      return 'Bug report';
+    }
+
+    return compactDescription.length > 80
+      ? `${compactDescription.slice(0, 77)}...`
+      : compactDescription;
+  }
+
+  private buildReviewLink(link: string, contentPassword: string | null) {
+    const isAbsolute = this.isAbsoluteUrl(link);
+    const url = this.toUrl(link);
+
+    if (contentPassword) {
+      url.searchParams.set('password', contentPassword);
+    }
+
+    if (isAbsolute) {
+      return url.toString();
+    }
+
+    return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  private hasDecryptionKey(link: string) {
+    return this.toUrl(link).hash.length > 1;
+  }
+
+  private toUrl(link: string) {
+    try {
+      return new URL(link);
+    } catch {
+      return new URL(link.startsWith('/') ? link : `/${link}`, 'https://redbox.local');
+    }
+  }
+
+  private isAbsoluteUrl(link: string) {
+    try {
+      new URL(link);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async createAuditLog(
@@ -418,9 +672,5 @@ export class AdminReportsService {
         meta: params.meta,
       },
     });
-  }
-
-  private paginateArray<T>(items: T[], query: OffsetPaginationQueryDto) {
-    return clone(items.slice(query.offset, query.offset + query.limit));
   }
 }

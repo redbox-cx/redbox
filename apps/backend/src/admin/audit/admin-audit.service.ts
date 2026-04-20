@@ -34,6 +34,23 @@ export class AdminAuditService {
         orderBy: { createdAt: 'desc' },
         take: query.limit,
         skip: query.offset,
+        select: {
+          id: true,
+          actorType: true,
+          adminUserId: true,
+          targetUserId: true,
+          action: true,
+          previousStatus: true,
+          newStatus: true,
+          reason: true,
+          meta: true,
+          createdAt: true,
+          targetUser: {
+            select: {
+              username: true,
+            },
+          },
+        },
       }),
       this.prismaService.adminAuditLog.count({ where }),
     ]);
@@ -44,9 +61,21 @@ export class AdminAuditService {
         actorType: item.actorType.toLowerCase(),
         adminId: item.adminUserId,
         targetUserId: item.targetUserId,
+        username: item.targetUser?.username ?? null,
         action: item.action,
         previousStatus: item.previousStatus ? item.previousStatus.toLowerCase() : null,
         newStatus: item.newStatus ? item.newStatus.toLowerCase() : null,
+        oldStatus:
+          item.action === 'user_status_changed' && item.previousStatus
+            ? item.previousStatus.toLowerCase()
+            : null,
+        statusChange:
+          item.action === 'user_status_changed'
+            ? {
+                oldStatus: item.previousStatus ? item.previousStatus.toLowerCase() : null,
+                newStatus: item.newStatus ? item.newStatus.toLowerCase() : null,
+              }
+            : null,
         reason: item.reason,
         meta: item.meta,
         createdAt: item.createdAt.toISOString(),

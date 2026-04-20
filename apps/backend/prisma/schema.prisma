@@ -98,6 +98,7 @@ model AdminUser {
   createdRestrictions UserRestriction[] @relation("RestrictionCreatedByAdmin")
   auditLogs          AdminAuditLog[]    @relation("AuditActorAdmin")
   resolvedContentReports ContentReport[] @relation("ResolvedContentReports")
+  resolvedBugReports     BugReport[]     @relation("ResolvedBugReports")
 }
 
 model InviteCode {
@@ -293,4 +294,33 @@ model ContentReport {
   @@index([createdAt])
   @@index([resolvedAt])
   @@index([resolvedByAdminUserId])
+}
+
+model BugReport {
+  id                   String               @id @default(uuid())
+  description          String               @db.Text
+  contactEmail         String?              @db.VarChar(255)
+  createdAt            DateTime             @default(now())
+  resolvedAt           DateTime?
+  actionTaken          String?              @db.VarChar(500)
+  resolvedByAdminUserId String?
+  resolvedByAdminUser  AdminUser?           @relation("ResolvedBugReports", fields: [resolvedByAdminUserId], references: [id], onDelete: SetNull)
+  attachments          BugReportAttachment[]
+
+  @@index([createdAt])
+  @@index([resolvedAt])
+  @@index([resolvedByAdminUserId])
+}
+
+model BugReportAttachment {
+  id         String    @id @default(uuid())
+  bugReportId String
+  bugReport  BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  filename   String    @db.VarChar(255)
+  mimetype   String    @db.VarChar(100)
+  size       Int
+  storageKey String    @unique
+  createdAt  DateTime  @default(now())
+
+  @@index([bugReportId])
 }

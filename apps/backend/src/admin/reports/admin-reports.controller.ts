@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminReportsService } from './admin-reports.service';
@@ -33,11 +44,32 @@ export class AdminReportsController {
   }
 
   @Get('reports/bugs')
-  getBugReports(@Query() query: OffsetPaginationQueryDto) {
+  async getBugReports(@Query() query: OffsetPaginationQueryDto) {
     return {
       message: 'Bug reports fetched successfully',
-      result: this.adminReportsService.getBugReports(query),
+      result: await this.adminReportsService.getBugReports(query),
     };
+  }
+
+  @Get('reports/bugs/:reportId/attachments/:attachmentId')
+  async downloadBugReportAttachment(
+    @Param('reportId') reportId: string,
+    @Param('attachmentId') attachmentId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.adminReportsService.downloadBugReportAttachment(
+      reportId,
+      attachmentId,
+    );
+    const safeName = file.filename.replace(/[^\w.\-]/g, '_');
+    const encodedName = encodeURIComponent(file.filename);
+
+    res.set({
+      'Content-Type': file.mimetype,
+      'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`,
+    });
+
+    return new StreamableFile(file.stream);
   }
 
   @Get('reports/archived')
