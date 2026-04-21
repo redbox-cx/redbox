@@ -212,6 +212,7 @@ export function RegisterForm() {
 
                 <div className="login-footer">
                     <p>Already have an account? <a href="/login">Login</a></p>
+                    <p className="legal-notice">By registering you agree to our <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
                 </div>
             </form>
         );

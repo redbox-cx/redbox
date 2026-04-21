@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import logoRed from "@/assets/images/logo_red.png";
 
 /* address shortner */
@@ -73,8 +74,8 @@ export function Footer() {
             <div className="footer-bottom">
                 <p>&copy; {new Date().getFullYear()} redbox Platform. All rights reserved.</p>
                 <div className="footer-legal">
-                    <a href="#">Terms of Service</a>
-                    <a href="#">Privacy Policy</a>
+                    <Link to="/terms">Terms of Service</Link>
+                    <Link to="/privacy">Privacy Policy</Link>
                 </div>
             </div>
         </footer>
