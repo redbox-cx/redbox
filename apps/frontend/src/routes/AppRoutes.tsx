@@ -22,8 +22,12 @@ import { MailPage } from "../pages/MailPage";
 import { SecureSphere } from "../pages/SecureSphere";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { SystemNotificationToast } from "../components/notifications/SystemNotificationToast";
+import { TermsPage } from "../pages/TermsPage";
+import { PrivacyPage } from "../pages/PrivacyPage";
+import { BlogPostPage } from "../pages/BlogPostPage";
 
-const PUBLIC_PATHS = ["/", "/about", "/blog", "/contact", "/about/securesphere", "/about/mail", "/login", "/register", "/recover"];
+const PUBLIC_PATHS = ["/", "/about", "/blog", "/contact", "/about/securesphere", "/about/mail", "/login", "/register", "/recover", "/terms", "/privacy"];
+const isPublicBlogPost = (path: string) => /^\/blog\/.+/.test(path);
 
 export function AppRoutes() {
     const { isAuthenticated, loading } = useAuth();
@@ -31,7 +35,7 @@ export function AppRoutes() {
 
     if (loading) return null;
 
-    const isPublic = PUBLIC_PATHS.some(p => location.pathname === p);
+    const isPublic = PUBLIC_PATHS.some(p => location.pathname === p) || isPublicBlogPost(location.pathname);
     const transitionKey = isPublic ? location.pathname : "app";
 
     return (
@@ -50,9 +54,12 @@ export function AppRoutes() {
                     <Route path="/" element={<Home />} />
                     <Route path="/about" element={<About />} />
                     <Route path="/blog" element={<Blog />} />
+                    <Route path="/blog/:id" element={<BlogPostPage />} />
                     <Route path="/contact" element={<Contact />} />
                     <Route path="/about/securesphere" element={<SecureSpherePage />} />
                     <Route path="/about/mail" element={<MailPublicPage />} />
+                    <Route path="/terms" element={<TermsPage />} />
+                    <Route path="/privacy" element={<PrivacyPage />} />
                     <Route
                         path="/login"
                         element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
