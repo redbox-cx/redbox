@@ -1,4 +1,5 @@
 import { motion } from "motion/react"
+import { Link } from "react-router-dom"
 import securesphereIcon from "@/assets/svg/securesphere-logo.svg"
 import mailIcon from "@/assets/svg/mail-logo.svg"
 import toolsetIcon from "@/assets/svg/toolset-logo.svg"
@@ -7,17 +8,20 @@ const servicesData = [
     {
         title: "SecureSphere",
         icon: securesphereIcon,
-        description: "A web-based chat platform for secure and private communication. Using end-to-end encryption, it ensures only intended recipients can read messages with minimal server data storage."
+        description: "A web-based chat platform for secure and private communication. Using end-to-end encryption, it ensures only intended recipients can read messages with minimal server data storage.",
+        path: "/about/securesphere"
     },
     {
         title: "Email Service",
         icon: mailIcon,
-        description: "Currently providing email routing via Cloudflare, with plans to transition to a fully self-hosted, private email solution in the near future."
+        description: "Currently providing email routing via Cloudflare, with plans to transition to a fully self-hosted, private email solution in the near future.",
+        path: "#"
     },
     {
         title: "Redbox Toolset",
         icon: toolsetIcon,
-        description: "A collection of privacy-focused tools: link shortener, secure file upload, and an encrypted bin. Designed to make sharing data safe and simple."
+        description: "A collection of privacy-focused tools: link shortener, secure file upload, and an encrypted bin. Designed to make sharing data safe and simple.",
+        path: "#"
     }
 ];
 
@@ -71,7 +75,7 @@ export function Services() {
                         </div>
                         <h3 className="service-title">{service.title}</h3>
                         <p className="service-description">{service.description}</p>
-                        <button className="service-open-btn">Open</button>
+                        <Link to={service.path} className="service-open-btn">Open</Link>
                     </motion.div>
                 ))}
             </motion.div>

@@ -4,6 +4,7 @@ import { Footer } from "../components/Footer";
 import aboutImg1 from "@/assets/images/about.jpg";
 import aboutImg2 from "@/assets/images/about2.jpg";
 import aboutImg3 from "@/assets/images/about3.jpg";
+import TiltedCard from "../components/TiltedCard";
 
 export function About() {
     useEffect(() => {
@@ -38,7 +39,7 @@ export function About() {
                             </p>
                         </div>
                         <div className="about-visual">
-                            <img src={aboutImg1} alt="Project" className="about-image" />
+                            <TiltedCard imageSrc={aboutImg1} altText="Project" containerHeight="300px" containerWidth="100%" imageHeight="300px" imageWidth="100%" showMobileWarning={false} showTooltip={false} rotateAmplitude={10} scaleOnHover={1.05} />
                         </div>
                     </section>
                     <section className="about-zigzag reverse">
@@ -53,7 +54,7 @@ export function About() {
                             </p>
                         </div>
                         <div className="about-visual">
-                            <img src={aboutImg3} alt="Philosophy" className="about-image" />
+                            <TiltedCard imageSrc={aboutImg3} altText="Philosophy" containerHeight="300px" containerWidth="100%" imageHeight="300px" imageWidth="100%" showMobileWarning={false} showTooltip={false} rotateAmplitude={10} scaleOnHover={1.05} />
                         </div>
                     </section>
                     <section className="about-zigzag">
@@ -67,7 +68,7 @@ export function About() {
                             </p>
                         </div>
                         <div className="about-visual">
-                            <img src={aboutImg2} alt="Team" className="about-image" />
+                            <TiltedCard imageSrc={aboutImg2} altText="Team" containerHeight="300px" containerWidth="100%" imageHeight="300px" imageWidth="100%" showMobileWarning={false} showTooltip={false} rotateAmplitude={10} scaleOnHover={1.05} />
                         </div>
                     </section>
                 </div>
