@@ -122,16 +122,21 @@ export interface AdminMailRecord {
 
 export interface AdminBlogPostRecord {
   id: string;
-  title: string;
-  slug: string;
-  excerpt: string;
-  content: string;
-  isHtml: boolean;
-  status: 'draft' | 'published';
-  author: string;
+  title: string | null;
+  subtitle: string;
+  markdown: string;
+  status: 'draft' | 'published' | 'withdrawn';
+  storageName: string;
+  contentSize: number;
+  categories: string[];
+  author: {
+    name: string;
+    title: string | null;
+  };
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
+  withdrawnAt: string | null;
 }
 
 export interface AdminLogRecord {
@@ -592,28 +597,38 @@ export const ADMIN_BLOG_POSTS: AdminBlogPostRecord[] = [
   {
     id: 'post_1',
     title: 'Platform Maintenance Update',
-    slug: 'platform-maintenance-update',
-    excerpt: 'We are performing scheduled maintenance...',
-    content: '<p>...</p>',
-    isHtml: true,
+    subtitle: 'We are performing scheduled maintenance...',
+    markdown: '# Platform Maintenance Update\n\nMaintenance details...',
     status: 'published',
-    author: 'Admin',
+    storageName: 'platform-maintenance-update.md',
+    contentSize: 55,
+    categories: ['Maintenance'],
+    author: {
+      name: 'Admin',
+      title: 'System Administrator',
+    },
     createdAt: '2026-04-16T12:00:00.000Z',
     updatedAt: '2026-04-16T12:20:00.000Z',
     publishedAt: '2026-04-16T12:30:00.000Z',
+    withdrawnAt: null,
   },
   {
     id: 'post_2',
     title: 'Quarterly Security Review',
-    slug: 'quarterly-security-review',
-    excerpt: 'A short summary of the latest security work.',
-    content: '<p>Security review draft...</p>',
-    isHtml: true,
+    subtitle: 'A short summary of the latest security work.',
+    markdown: '# Quarterly Security Review\n\nSecurity review draft...',
     status: 'draft',
-    author: 'Admin',
+    storageName: 'quarterly-security-review.md',
+    contentSize: 54,
+    categories: ['Security'],
+    author: {
+      name: 'Admin',
+      title: 'Security Team',
+    },
     createdAt: '2026-04-15T09:00:00.000Z',
     updatedAt: '2026-04-15T10:00:00.000Z',
     publishedAt: null,
+    withdrawnAt: null,
   },
 ];
 

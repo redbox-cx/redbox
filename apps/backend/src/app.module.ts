@@ -10,6 +10,7 @@ import { LinksModule } from './links/links.module';
 import { BinsModule } from './bins/bins.module';
 import { MailModule } from './mail/mail.module';
 import { ReportsModule } from './reports/reports.module';
+import { BlogModule } from './blog/blog.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ReportsModule } from './reports/reports.module';
     BinsModule,
     MailModule,
     ReportsModule,
+    BlogModule,
   ],
   controllers: [],
   providers: [],

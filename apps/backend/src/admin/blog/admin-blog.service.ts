@@ -1,118 +1,219 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ADMIN_BLOG_POSTS, type AdminBlogPostRecord } from '../admin.data';
-import { AdminBlogQueryDto, CreateAdminBlogPostDto, UpdateAdminBlogPostDto } from '../dto/blog.dto';
-
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { AuditActorType, BlogPostStatus, Prisma } from '@prisma/client';
+import { BlogService } from 'src/blog/blog.service';
+import { PrismaService } from 'src/prisma.service';
+import { AdminBlogQueryDto, SaveAdminBlogPostDto, UpdateAdminBlogPostDto } from '../dto/blog.dto';
 
 @Injectable()
 export class AdminBlogService {
-  private readonly adminProfile = {
-    username: 'Admin',
-  };
-
-  private blogPosts: AdminBlogPostRecord[] = clone(ADMIN_BLOG_POSTS);
+  constructor(
+    private readonly blogService: BlogService,
+    private readonly prismaService: PrismaService,
+  ) {}
 
   getBlogPosts(query: AdminBlogQueryDto) {
-    let items = [...this.blogPosts];
-
-    if (query.status) {
-      items = items.filter((post) => post.status === query.status);
-    }
-
-    if (query.search) {
-      const searchValue = query.search.toLowerCase();
-      items = items.filter(
-        (post) =>
-          post.title.toLowerCase().includes(searchValue) ||
-          post.slug.toLowerCase().includes(searchValue) ||
-          post.excerpt.toLowerCase().includes(searchValue),
-      );
-    }
-
-    const paginatedItems = items.slice(query.offset, query.offset + query.limit);
-
-    return {
-      items: clone(paginatedItems),
-      pagination: {
-        limit: query.limit,
-        offset: query.offset,
-        returned: paginatedItems.length,
-        hasMore: query.offset + paginatedItems.length < items.length,
-      },
-    };
+    return this.blogService.getAdminBlogPosts(query);
   }
 
-  createBlogPost(dto: CreateAdminBlogPostDto) {
-    if (this.blogPosts.some((post) => post.slug === dto.slug)) {
-      throw new BadRequestException('Slug already exists');
-    }
+  getBlogPost(postId: string) {
+    return this.blogService.getAdminBlogPostById(postId);
+  }
 
-    const now = new Date().toISOString();
-    const postId = `post_${Date.now()}`;
-    this.blogPosts.unshift({
-      id: postId,
-      title: dto.title,
-      slug: dto.slug,
-      excerpt: dto.excerpt,
-      content: dto.content,
-      isHtml: dto.isHtml,
-      status: dto.status,
-      author: this.adminProfile.username,
-      createdAt: now,
-      updatedAt: now,
-      publishedAt: dto.status === 'published' ? now : null,
+  async createDraft(adminUserId: string, dto: SaveAdminBlogPostDto) {
+    const result = await this.blogService.createAdminBlogPost(
+      adminUserId,
+      dto,
+      BlogPostStatus.DRAFT,
+    );
+    const createdPost = await this.getBlogPostAuditSnapshot(result.postId);
+
+    await this.createAuditLog({
+      adminUserId,
+      action: 'blog_post_created',
+      reason: `Blog post "${createdPost.title ?? createdPost.subtitle}" saved as draft`,
+      meta: {
+        blogPostId: result.postId,
+        post: createdPost,
+      },
     });
 
-    return {
-      success: true,
-      message: 'Blog post created successfully',
-      postId,
-    };
+    return result;
   }
 
-  updateBlogPost(postId: string, dto: UpdateAdminBlogPostDto) {
-    const post = this.findBlogPostOrThrow(postId);
+  async createPublished(adminUserId: string, dto: SaveAdminBlogPostDto) {
+    const result = await this.blogService.createAdminBlogPost(
+      adminUserId,
+      dto,
+      BlogPostStatus.PUBLISHED,
+    );
+    const createdPost = await this.getBlogPostAuditSnapshot(result.postId);
 
-    if (dto.slug && dto.slug !== post.slug && this.blogPosts.some((entry) => entry.slug === dto.slug)) {
-      throw new BadRequestException('Slug already exists');
-    }
+    await this.createAuditLog({
+      adminUserId,
+      action: 'blog_post_published',
+      reason: `Blog post "${createdPost.title ?? createdPost.subtitle}" published`,
+      meta: {
+        blogPostId: result.postId,
+        post: createdPost,
+        createdAndPublished: true,
+      },
+    });
 
-    post.title = dto.title ?? post.title;
-    post.slug = dto.slug ?? post.slug;
-    post.excerpt = dto.excerpt ?? post.excerpt;
-    post.content = dto.content ?? post.content;
-    post.isHtml = dto.isHtml ?? post.isHtml;
-    post.status = dto.status ?? post.status;
-    post.updatedAt = new Date().toISOString();
-
-    if (post.status === 'published' && !post.publishedAt) {
-      post.publishedAt = post.updatedAt;
-    }
-
-    return {
-      success: true,
-      message: 'Blog post updated successfully',
-    };
+    return result;
   }
 
-  deleteBlogPost(postId: string) {
-    this.findBlogPostOrThrow(postId);
-    this.blogPosts = this.blogPosts.filter((entry) => entry.id !== postId);
+  async updateBlogPost(adminUserId: string, postId: string, dto: UpdateAdminBlogPostDto) {
+    const before = await this.getBlogPostAuditSnapshot(postId);
+    const result = await this.blogService.updateAdminBlogPost(postId, dto);
+    const after = await this.getBlogPostAuditSnapshot(postId);
 
-    return {
-      success: true,
-      message: 'Blog post deleted successfully',
-    };
+    await this.createAuditLog({
+      adminUserId,
+      action: 'blog_post_updated',
+      reason: `Blog post "${after.title ?? after.subtitle}" updated`,
+      meta: {
+        blogPostId: postId,
+        before,
+        after,
+        changedFields: Object.keys(dto),
+      },
+    });
+
+    return result;
   }
 
-  private findBlogPostOrThrow(postId: string) {
-    const post = this.blogPosts.find((entry) => entry.id === postId);
+  async publishBlogPost(adminUserId: string, postId: string) {
+    const before = await this.getBlogPostAuditSnapshot(postId);
+    const result = await this.blogService.publishAdminBlogPost(postId);
+    const after = await this.getBlogPostAuditSnapshot(postId);
+
+    await this.createAuditLog({
+      adminUserId,
+      action: 'blog_post_published',
+      reason: `Blog post "${after.title ?? after.subtitle}" published`,
+      meta: {
+        blogPostId: postId,
+        before,
+        after,
+      },
+    });
+
+    return result;
+  }
+
+  async withdrawBlogPost(adminUserId: string, postId: string) {
+    const before = await this.getBlogPostAuditSnapshot(postId);
+    const result = await this.blogService.withdrawAdminBlogPost(postId);
+    const after = await this.getBlogPostAuditSnapshot(postId);
+
+    await this.createAuditLog({
+      adminUserId,
+      action: 'blog_post_withdrawn',
+      reason: `Blog post "${after.title ?? after.subtitle}" withdrawn`,
+      meta: {
+        blogPostId: postId,
+        before,
+        after,
+      },
+    });
+
+    return result;
+  }
+
+  async deleteBlogPost(adminUserId: string, postId: string) {
+    const before = await this.getBlogPostAuditSnapshot(postId);
+    const result = await this.blogService.deleteAdminBlogPost(postId);
+
+    await this.createAuditLog({
+      adminUserId,
+      action: 'blog_post_deleted',
+      reason: `Blog post "${before.title ?? before.subtitle}" deleted`,
+      meta: {
+        blogPostId: postId,
+        deletedPost: before,
+      },
+    });
+
+    return result;
+  }
+
+  private async getBlogPostAuditSnapshot(postId: string) {
+    const post = await this.prismaService.blogPost.findUnique({
+      where: { id: postId },
+      select: {
+        id: true,
+        title: true,
+        subtitle: true,
+        categories: true,
+        storageName: true,
+        contentSize: true,
+        status: true,
+        authorName: true,
+        authorTitle: true,
+        createdAt: true,
+        updatedAt: true,
+        publishedAt: true,
+        withdrawnAt: true,
+      },
+    });
+
     if (!post) {
       throw new NotFoundException('Blog post not found');
     }
 
-    return post;
+    return {
+      id: post.id,
+      title: post.title,
+      subtitle: post.subtitle,
+      categories: this.toCategories(post.categories),
+      storageName: post.storageName,
+      contentSize: post.contentSize,
+      status: this.toApiStatus(post.status),
+      author: {
+        name: post.authorName,
+        title: post.authorTitle,
+      },
+      createdAt: post.createdAt.toISOString(),
+      updatedAt: post.updatedAt.toISOString(),
+      publishedAt: post.publishedAt?.toISOString() ?? null,
+      withdrawnAt: post.withdrawnAt?.toISOString() ?? null,
+    };
+  }
+
+  private toApiStatus(status: BlogPostStatus) {
+    if (status === BlogPostStatus.PUBLISHED) {
+      return 'published';
+    }
+
+    if (status === BlogPostStatus.WITHDRAWN) {
+      return 'withdrawn';
+    }
+
+    return 'draft';
+  }
+
+  private toCategories(categories: Prisma.JsonValue | null) {
+    if (!Array.isArray(categories)) {
+      return [];
+    }
+
+    return categories.filter((category): category is string => typeof category === 'string');
+  }
+
+  private async createAuditLog(params: {
+    adminUserId: string;
+    action: string;
+    reason: string;
+    meta: Prisma.InputJsonValue;
+  }) {
+    await this.prismaService.adminAuditLog.create({
+      data: {
+        actorType: AuditActorType.ADMIN,
+        adminUserId: params.adminUserId,
+        action: params.action,
+        reason: params.reason,
+        meta: params.meta,
+      },
+    });
   }
 }

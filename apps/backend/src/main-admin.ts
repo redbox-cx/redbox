@@ -20,7 +20,14 @@ async function bootstrap() {
     defaultVersion: '1',
   });
 
-  app.use(json({ limit: '100kb' }));
+  app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/api/v1/admin/blog')) {
+      json({ limit: process.env.ADMIN_BLOG_BODY_LIMIT ?? '10mb' })(req, res, next);
+      return;
+    }
+
+    json({ limit: '100kb' })(req, res, next);
+  });
   app.use(urlencoded({ extended: true, limit: '100kb' }));
 
   app.useGlobalPipes(

@@ -59,6 +59,12 @@ enum InternalMailTargetType {
   USER
 }
 
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+  WITHDRAWN
+}
+
 model User {
   id          String     @id @default(uuid())
   username    String     @unique @db.VarChar(50)
@@ -108,6 +114,7 @@ model AdminUser {
   createdInternalMails   InternalMail[]  @relation("InternalMailCreatedBy")
   recalledInternalMails  InternalMail[]  @relation("InternalMailRecalledBy")
   deletedInternalMails   InternalMail[]  @relation("InternalMailDeletedBy")
+  blogPosts              BlogPost[]      @relation("BlogPostAuthor")
 }
 
 model InviteCode {
@@ -400,4 +407,26 @@ model InternalMailAttachment {
   createdAt      DateTime     @default(now())
 
   @@index([internalMailId])
+}
+
+model BlogPost {
+  id                   String         @id @default(uuid())
+  title                String?        @db.VarChar(150)
+  subtitle             String         @db.VarChar(300)
+  categories           Json?
+  storageName          String         @unique @db.VarChar(191)
+  contentSize          Int
+  status               BlogPostStatus @default(DRAFT)
+  authorAdminUserId    String?
+  authorAdminUser      AdminUser?     @relation("BlogPostAuthor", fields: [authorAdminUserId], references: [id], onDelete: SetNull)
+  authorName           String         @db.VarChar(80)
+  authorTitle          String?        @db.VarChar(100)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  publishedAt          DateTime?
+  withdrawnAt          DateTime?
+
+  @@index([status, publishedAt])
+  @@index([createdAt])
+  @@index([authorAdminUserId])
 }
