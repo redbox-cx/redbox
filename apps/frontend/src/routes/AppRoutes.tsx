@@ -6,7 +6,6 @@ import { Register } from "../pages/Register";
 import { About } from "../pages/About";
 import { Blog } from "../pages/Blog";
 import { Contact } from "../pages/Contact";
-import { Donate } from "../pages/Donate";
 import { DashBoard } from "../pages/Dashboard";
 import { Upload } from "../pages/Upload";
 import { Download } from "../pages/Download";
@@ -31,7 +30,6 @@ export function AppRoutes() {
             <Route path="/about" element={<About />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/contact" element={<Contact />} />
-            <Route path="/donate" element={<Donate />} />
             <Route 
                 path="/login" 
                 element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
