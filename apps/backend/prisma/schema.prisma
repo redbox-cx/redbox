@@ -31,6 +31,7 @@ enum UserAvatar {
   avatar_mesh_r
   avatar_mesh_y
   avatar_mesh_p
+  avatar_jennifer
 }
 
 enum UserRestrictionType {
@@ -83,16 +84,16 @@ model User {
   createdAt   DateTime   @default(now())
   issuedCodes Int        @default(0) // amount of codes the user made
 
-  generatedCodes InviteCode[]    @relation("GeneratedBy")
-  files          File[]
-  links          Link[]
-  bins           Bin[]
-  inbox          Mail[]
-  blockedSenders BlockedSender[]
-  restrictions   UserRestriction[]
-  deletionRequests UserDeletionRequest[]
-  auditLogs      AdminAuditLog[]     @relation("AuditTargetUser")
-  contentReports ContentReport[]     @relation("ReportedContentOwner")
+  generatedCodes         InviteCode[]           @relation("GeneratedBy")
+  files                  File[]
+  links                  Link[]
+  bins                   Bin[]
+  inbox                  Mail[]
+  blockedSenders         BlockedSender[]
+  restrictions           UserRestriction[]
+  deletionRequests       UserDeletionRequest[]
+  auditLogs              AdminAuditLog[]        @relation("AuditTargetUser")
+  contentReports         ContentReport[]        @relation("ReportedContentOwner")
   internalMailDeliveries InternalMailDelivery[]
 
   encryptedMasterKey String? @db.Text
@@ -110,20 +111,20 @@ model User {
 }
 
 model AdminUser {
-  id           String     @id @default(uuid())
-  username     String     @unique @db.VarChar(50)
-  passwordHash String     @db.VarChar(100)
-  avatar       UserAvatar @default(DEFAULT_AVATAR)
-  sessionKey   String     @default(uuid())
-  createdRestrictions UserRestriction[] @relation("RestrictionCreatedByAdmin")
-  auditLogs          AdminAuditLog[]    @relation("AuditActorAdmin")
-  resolvedContentReports ContentReport[] @relation("ResolvedContentReports")
-  resolvedBugReports     BugReport[]     @relation("ResolvedBugReports")
-  createdInternalMails   InternalMail[]  @relation("InternalMailCreatedBy")
-  recalledInternalMails  InternalMail[]  @relation("InternalMailRecalledBy")
-  deletedInternalMails   InternalMail[]  @relation("InternalMailDeletedBy")
-  blogPosts              BlogPost[]      @relation("BlogPostAuthor")
-  createdInviteCodes     InviteCode[]    @relation("InviteCodeCreatedByAdmin")
+  id                         String               @id @default(uuid())
+  username                   String               @unique @db.VarChar(50)
+  passwordHash               String               @db.VarChar(100)
+  avatar                     UserAvatar           @default(DEFAULT_AVATAR)
+  sessionKey                 String               @default(uuid())
+  createdRestrictions        UserRestriction[]    @relation("RestrictionCreatedByAdmin")
+  auditLogs                  AdminAuditLog[]      @relation("AuditActorAdmin")
+  resolvedContentReports     ContentReport[]      @relation("ResolvedContentReports")
+  resolvedBugReports         BugReport[]          @relation("ResolvedBugReports")
+  createdInternalMails       InternalMail[]       @relation("InternalMailCreatedBy")
+  recalledInternalMails      InternalMail[]       @relation("InternalMailRecalledBy")
+  deletedInternalMails       InternalMail[]       @relation("InternalMailDeletedBy")
+  blogPosts                  BlogPost[]           @relation("BlogPostAuthor")
+  createdInviteCodes         InviteCode[]         @relation("InviteCodeCreatedByAdmin")
   createdSystemNotifications SystemNotification[] @relation("SystemNotificationCreatedBy")
 }
 
@@ -156,8 +157,8 @@ model File {
   createdAt DateTime @default(now())
   expiresAt DateTime
 
-  shareToken   String  @unique @default(uuid())
-  passwordHash String? @db.VarChar(100)
+  shareToken     String          @unique @default(uuid())
+  passwordHash   String?         @db.VarChar(100)
   contentReports ContentReport[] @relation("ReportedContentFile")
 
   encryptedFileKey String @db.Text // File-Secret, encrypted with masterkey
@@ -182,10 +183,10 @@ model Bin {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  createdAt    DateTime  @default(now())
-  expiresAt    DateTime?
-  shareToken   String    @unique @default(uuid())
-  passwordHash String?   @db.VarChar(100)
+  createdAt      DateTime        @default(now())
+  expiresAt      DateTime?
+  shareToken     String          @unique @default(uuid())
+  passwordHash   String?         @db.VarChar(100)
   contentReports ContentReport[] @relation("ReportedContentBin")
 
   // e2ee
@@ -209,8 +210,8 @@ model Mail {
   isArchived Boolean @default(false)
   isSpam     Boolean @default(false)
 
-  encryptedMailKey String @db.Text
-  mailKeyIv        String @db.VarChar(50)
+  encryptedMailKey     String                @db.Text
+  mailKeyIv            String                @db.VarChar(50)
   internalMailDelivery InternalMailDelivery?
 }
 
@@ -252,10 +253,10 @@ model UserRestriction {
 }
 
 model UserDeletionRequest {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  requestedAt   DateTime @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestedAt   DateTime  @default(now())
   deleteAfterAt DateTime
   cancelledAt   DateTime?
   processedAt   DateTime?
@@ -294,34 +295,34 @@ model ServiceRuntime {
 }
 
 model AdminStorageSnapshot {
-  id            String   @id @default(uuid())
-  uploadsBytes  BigInt   @default(0)
-  mailBytes     BigInt   @default(0)
-  binsBytes     BigInt   @default(0)
-  totalUsedBytes BigInt  @default(0)
-  recordedAt    DateTime @default(now())
+  id             String   @id @default(uuid())
+  uploadsBytes   BigInt   @default(0)
+  mailBytes      BigInt   @default(0)
+  binsBytes      BigInt   @default(0)
+  totalUsedBytes BigInt   @default(0)
+  recordedAt     DateTime @default(now())
 
   @@index([recordedAt])
 }
 
 model ContentReport {
-  id                   String              @id @default(uuid())
-  contentType          ReportedContentType
-  reportedUserId       String
-  reportedUser         User                @relation("ReportedContentOwner", fields: [reportedUserId], references: [id])
-  fileId               String?
-  file                 File?               @relation("ReportedContentFile", fields: [fileId], references: [id], onDelete: SetNull)
-  binId                String?
-  bin                  Bin?                @relation("ReportedContentBin", fields: [binId], references: [id], onDelete: SetNull)
-  contentLink          String              @db.Text
-  contentPasswordEncrypted String?         @db.Text
-  reason               String              @db.Text
-  reporterEmail        String?             @db.VarChar(255)
-  createdAt            DateTime            @default(now())
-  resolvedAt           DateTime?
-  actionTaken          String?             @db.VarChar(500)
-  resolvedByAdminUserId String?
-  resolvedByAdminUser  AdminUser?          @relation("ResolvedContentReports", fields: [resolvedByAdminUserId], references: [id], onDelete: SetNull)
+  id                       String              @id @default(uuid())
+  contentType              ReportedContentType
+  reportedUserId           String
+  reportedUser             User                @relation("ReportedContentOwner", fields: [reportedUserId], references: [id])
+  fileId                   String?
+  file                     File?               @relation("ReportedContentFile", fields: [fileId], references: [id], onDelete: SetNull)
+  binId                    String?
+  bin                      Bin?                @relation("ReportedContentBin", fields: [binId], references: [id], onDelete: SetNull)
+  contentLink              String              @db.Text
+  contentPasswordEncrypted String?             @db.Text
+  reason                   String              @db.Text
+  reporterEmail            String?             @db.VarChar(255)
+  createdAt                DateTime            @default(now())
+  resolvedAt               DateTime?
+  actionTaken              String?             @db.VarChar(500)
+  resolvedByAdminUserId    String?
+  resolvedByAdminUser      AdminUser?          @relation("ResolvedContentReports", fields: [resolvedByAdminUserId], references: [id], onDelete: SetNull)
 
   @@index([reportedUserId])
   @@index([fileId])
@@ -332,15 +333,15 @@ model ContentReport {
 }
 
 model BugReport {
-  id                   String               @id @default(uuid())
-  description          String               @db.Text
-  contactEmail         String?              @db.VarChar(255)
-  createdAt            DateTime             @default(now())
-  resolvedAt           DateTime?
-  actionTaken          String?              @db.VarChar(500)
+  id                    String                @id @default(uuid())
+  description           String                @db.Text
+  contactEmail          String?               @db.VarChar(255)
+  createdAt             DateTime              @default(now())
+  resolvedAt            DateTime?
+  actionTaken           String?               @db.VarChar(500)
   resolvedByAdminUserId String?
-  resolvedByAdminUser  AdminUser?           @relation("ResolvedBugReports", fields: [resolvedByAdminUserId], references: [id], onDelete: SetNull)
-  attachments          BugReportAttachment[]
+  resolvedByAdminUser   AdminUser?            @relation("ResolvedBugReports", fields: [resolvedByAdminUserId], references: [id], onDelete: SetNull)
+  attachments           BugReportAttachment[]
 
   @@index([createdAt])
   @@index([resolvedAt])
@@ -348,43 +349,43 @@ model BugReport {
 }
 
 model BugReportAttachment {
-  id         String    @id @default(uuid())
+  id          String    @id @default(uuid())
   bugReportId String
-  bugReport  BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
-  filename   String    @db.VarChar(255)
-  mimetype   String    @db.VarChar(100)
-  size       Int
-  storageKey String    @unique
-  createdAt  DateTime  @default(now())
+  bugReport   BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  filename    String    @db.VarChar(255)
+  mimetype    String    @db.VarChar(100)
+  size        Int
+  storageKey  String    @unique
+  createdAt   DateTime  @default(now())
 
   @@index([bugReportId])
 }
 
 model InternalMail {
-  id                   String               @id @default(uuid())
-  createdByAdminUserId String?
-  createdByAdminUser   AdminUser?           @relation("InternalMailCreatedBy", fields: [createdByAdminUserId], references: [id], onDelete: SetNull)
-  senderId             String               @db.VarChar(50)
-  senderAddress        String               @db.VarChar(255)
-  senderLabel          String               @db.VarChar(100)
-  toAddress            String               @db.VarChar(255)
-  targetType           InternalMailTargetType
-  targetUsername       String?              @db.VarChar(50)
-  subject              String               @db.VarChar(255)
-  body                 String               @db.MediumText
-  isHtml               Boolean              @default(false)
-  template             String?              @db.VarChar(100)
-  createdAt            DateTime             @default(now())
-  recalledAt           DateTime?
-  recallReason         String?              @db.VarChar(500)
+  id                    String                   @id @default(uuid())
+  createdByAdminUserId  String?
+  createdByAdminUser    AdminUser?               @relation("InternalMailCreatedBy", fields: [createdByAdminUserId], references: [id], onDelete: SetNull)
+  senderId              String                   @db.VarChar(50)
+  senderAddress         String                   @db.VarChar(255)
+  senderLabel           String                   @db.VarChar(100)
+  toAddress             String                   @db.VarChar(255)
+  targetType            InternalMailTargetType
+  targetUsername        String?                  @db.VarChar(50)
+  subject               String                   @db.VarChar(255)
+  body                  String                   @db.MediumText
+  isHtml                Boolean                  @default(false)
+  template              String?                  @db.VarChar(100)
+  createdAt             DateTime                 @default(now())
+  recalledAt            DateTime?
+  recallReason          String?                  @db.VarChar(500)
   recalledByAdminUserId String?
-  recalledByAdminUser  AdminUser?           @relation("InternalMailRecalledBy", fields: [recalledByAdminUserId], references: [id], onDelete: SetNull)
-  deletedAt            DateTime?
-  deleteReason         String?              @db.VarChar(500)
-  deletedByAdminUserId String?
-  deletedByAdminUser   AdminUser?           @relation("InternalMailDeletedBy", fields: [deletedByAdminUserId], references: [id], onDelete: SetNull)
-  deliveries           InternalMailDelivery[]
-  attachments          InternalMailAttachment[]
+  recalledByAdminUser   AdminUser?               @relation("InternalMailRecalledBy", fields: [recalledByAdminUserId], references: [id], onDelete: SetNull)
+  deletedAt             DateTime?
+  deleteReason          String?                  @db.VarChar(500)
+  deletedByAdminUserId  String?
+  deletedByAdminUser    AdminUser?               @relation("InternalMailDeletedBy", fields: [deletedByAdminUserId], references: [id], onDelete: SetNull)
+  deliveries            InternalMailDelivery[]
+  attachments           InternalMailAttachment[]
 
   @@index([createdAt])
   @@index([senderId])
@@ -428,21 +429,21 @@ model InternalMailAttachment {
 }
 
 model BlogPost {
-  id                   String         @id @default(uuid())
-  title                String?        @db.VarChar(150)
-  subtitle             String         @db.VarChar(300)
-  categories           Json?
-  storageName          String         @unique @db.VarChar(191)
-  contentSize          Int
-  status               BlogPostStatus @default(DRAFT)
-  authorAdminUserId    String?
-  authorAdminUser      AdminUser?     @relation("BlogPostAuthor", fields: [authorAdminUserId], references: [id], onDelete: SetNull)
-  authorName           String         @db.VarChar(80)
-  authorTitle          String?        @db.VarChar(100)
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  publishedAt          DateTime?
-  withdrawnAt          DateTime?
+  id                String         @id @default(uuid())
+  title             String?        @db.VarChar(150)
+  subtitle          String         @db.VarChar(300)
+  categories        Json?
+  storageName       String         @unique @db.VarChar(191)
+  contentSize       Int
+  status            BlogPostStatus @default(DRAFT)
+  authorAdminUserId String?
+  authorAdminUser   AdminUser?     @relation("BlogPostAuthor", fields: [authorAdminUserId], references: [id], onDelete: SetNull)
+  authorName        String         @db.VarChar(80)
+  authorTitle       String?        @db.VarChar(100)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  publishedAt       DateTime?
+  withdrawnAt       DateTime?
 
   @@index([status, publishedAt])
   @@index([createdAt])
