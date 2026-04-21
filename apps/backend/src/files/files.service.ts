@@ -5,7 +5,7 @@ import { Redis } from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as bcrypt from 'bcryptjs';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { addDays } from 'date-fns';
+import { addDays, addHours } from 'date-fns';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import {
     S3Client, CreateMultipartUploadCommand, UploadPartCommand,
@@ -37,7 +37,15 @@ export class FilesService {
         });
     }
 
-    async initializeUpload(userId: string, fileSize: number, totalChunks: number, password?: string) {
+    private calculateExpiration(expiresIn?: string): Date {
+        if (expiresIn === '1h') return addHours(new Date(), 1);
+        if (expiresIn === '24h') return addHours(new Date(), 24);
+        if (expiresIn === '7d') return addDays(new Date(), 7);
+
+        return addDays(new Date(), 30);
+    }
+
+    async initializeUpload(userId: string, fileSize: number, totalChunks: number, password?: string, expiresIn?: string) {
         if (fileSize > this.MAX_QUOTA) throw new BadRequestException('File too large');
 
         await this.prisma.$transaction(async (tx) => {
@@ -67,6 +75,7 @@ export class FilesService {
                 nextExpectedChunk: 0,
                 fileSize,
                 passwordHash,
+                expiresIn: expiresIn ?? '30d',
                 storageKey,
                 s3UploadId: s3Init.UploadId,
                 parts: []
@@ -149,7 +158,7 @@ export class FilesService {
                     mimetype,
                     userId,
                     passwordHash: meta.passwordHash,
-                    expiresAt: addDays(new Date(), 30),
+                    expiresAt: this.calculateExpiration(meta.expiresIn),
                     encryptedFileKey,
                     fileKeyIv: fileKeyIv.toString('hex'),
                 },

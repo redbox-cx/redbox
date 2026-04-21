@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { CryptoService } from '../../services/CryptoService';
 import { FileService, CHUNK_SIZE } from '../../services/FileService';
+import { ExpiryDropdown } from '../bin/ExpiryDropdown';
 
 type UploadPhase = 'idle' | 'uploading' | 'finalizing' | 'done' | 'error';
 
@@ -33,6 +34,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
     const [file, setFile] = useState<File | null>(null);
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [expiresIn, setExpiresIn] = useState('30d');
     const [dragging, setDragging] = useState(false);
     const [phase, setPhase] = useState<UploadPhase>('idle');
     const [progress, setProgress] = useState(0);
@@ -68,7 +70,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
             const chunks = Math.ceil(file.size / CHUNK_SIZE);
             setTotalChunks(chunks);
 
-            const uploadId = await FileService.init(file.size, chunks, password || undefined);
+            const uploadId = await FileService.init(file.size, chunks, password || undefined, expiresIn);
 
             for (let i = 0; i < chunks; i++) {
                 setCurrentChunk(i + 1);
@@ -97,6 +99,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                 clearFile();
                 setPassword('');
                 setShowPassword(false);
+                setExpiresIn('30d');
                 setProgress(0);
             }, 2500);
         } catch (err: any) {
@@ -159,6 +162,12 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
 
                 {!isUploading && phase !== 'done' && (
                     <div className="upload-password-row">
+                        <ExpiryDropdown
+                            value={expiresIn}
+                            onChange={setExpiresIn}
+                            disabled={isUploading}
+                            allowNever={false}
+                        />
                         <button className={`upload-password-toggle ${showPassword ? 'active' : ''}`}
                             onClick={() => setShowPassword(v => !v)} type="button">
                             <i className={`bi bi-lock${showPassword ? '-fill' : ''}`} />

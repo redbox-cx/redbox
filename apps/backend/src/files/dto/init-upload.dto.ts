@@ -1,4 +1,6 @@
-import { IsInt, Min, Max, IsOptional, IsString, Length } from 'class-validator';
+import { IsIn, IsInt, Min, Max, IsOptional, IsString, Length } from 'class-validator';
+
+const FILE_EXPIRY_OPTIONS = ['1h', '24h', '7d', '30d'] as const;
 
 export class InitUploadDto {
     @IsInt()
@@ -17,4 +19,11 @@ export class InitUploadDto {
             message: 'Password must not have more than 100 characters'
         })
     password?: string;
+
+    @IsString()
+    @IsOptional()
+    @IsIn(FILE_EXPIRY_OPTIONS, {
+        message: 'Expiration must be 1h, 24h, 7d or 30d'
+    })
+    expiresIn?: string;
 }

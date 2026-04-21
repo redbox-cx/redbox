@@ -37,7 +37,8 @@ export class FilesController {
             userId, 
             dto.fileSize, 
             dto.totalChunks, 
-            dto.password
+            dto.password,
+            dto.expiresIn
         );
         return {
             message: 'Upload initialized',

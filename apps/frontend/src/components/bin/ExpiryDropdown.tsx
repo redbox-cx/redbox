@@ -12,12 +12,14 @@ interface Props {
     value: string;
     onChange: (v: string) => void;
     disabled: boolean;
+    allowNever?: boolean;
 }
 
-export function ExpiryDropdown({ value, onChange, disabled }: Props) {
+export function ExpiryDropdown({ value, onChange, disabled, allowNever = true }: Props) {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
-    const selected = EXPIRY_OPTIONS.find(o => o.value === value) ?? EXPIRY_OPTIONS[3];
+    const options = allowNever ? EXPIRY_OPTIONS : EXPIRY_OPTIONS.filter(o => o.value !== 'never');
+    const selected = options.find(o => o.value === value) ?? options[3];
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -36,7 +38,7 @@ export function ExpiryDropdown({ value, onChange, disabled }: Props) {
             </button>
             {open && (
                 <div className="bin-dropdown-menu">
-                    {EXPIRY_OPTIONS.map(o => (
+                    {options.map(o => (
                         <button key={o.value} type="button"
                             className={`bin-dropdown-item ${o.value === value ? 'active' : ''}`}
                             onClick={() => { onChange(o.value); setOpen(false); }}

@@ -15,16 +15,25 @@ export interface FileEntry {
 }
 
 export const FileService = {
-    async init(fileSize: number, totalChunks: number, password?: string): Promise<string> {
+    async init(fileSize: number, totalChunks: number, password?: string, expiresIn?: string): Promise<string> {
         const body: Record<string, unknown> = { fileSize, totalChunks };
         if (password) body.password = password;
+        if (expiresIn) body.expiresIn = expiresIn;
         const { data } = await apiClient.post('/files/init', body);
         return data.result.uploadId;
     },
 
     async uploadChunk(uploadId: string, chunkIndex: number, encryptedChunk: Uint8Array): Promise<void> {
         const form = new FormData();
-        form.append('file', new Blob([encryptedChunk], { type: 'application/octet-stream' }));
+        const chunkBuffer =
+            encryptedChunk.buffer instanceof ArrayBuffer
+                ? encryptedChunk.buffer.slice(
+                    encryptedChunk.byteOffset,
+                    encryptedChunk.byteOffset + encryptedChunk.byteLength,
+                )
+                : new Uint8Array(encryptedChunk).buffer;
+
+        form.append('file', new Blob([chunkBuffer], { type: 'application/octet-stream' }));
         form.append('chunkIndex', String(chunkIndex));
         await apiClient.patch(`/files/upload/${uploadId}`, form, {
             headers: { 'Content-Type': 'multipart/form-data' },
