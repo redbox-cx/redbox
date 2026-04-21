@@ -103,6 +103,7 @@ export default function DecryptedText({
         <span
             ref={ref}
             className={parentClassName}
+            style={{ whiteSpace: 'nowrap' }}
             onMouseEnter={animateOn === "hover" ? startAnimation : undefined}
         >
             {displayText.map((char, i) => (
