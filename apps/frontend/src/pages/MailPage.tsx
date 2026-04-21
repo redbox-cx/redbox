@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { MailService, type MailListItem, type MailDetail, type MailFolder, type MailAttachment } from '../services/MailService';
 import { MailListPanel } from '../components/mail/MailListPanel';
 import { MailDetailPanel } from '../components/mail/MailDetailPanel';
+import { useMailEvents } from '../hooks/useMailEvents';
 
 const PAGE_SIZE = 50;
 type SortKey = 'newest' | 'oldest' | 'unread' | 'read';
@@ -50,6 +51,8 @@ export function MailPage() {
     };
 
     useEffect(() => { setMails([]); loadPage(page, sort, folder, debouncedSearch); }, [page, sort, folder, debouncedSearch]);
+
+    useMailEvents(() => loadPage(page, sort, folder, debouncedSearch));
 
     useEffect(() => {
         MailService.getStorage().then(s => setMailStorageMb(s.usedMb)).catch(() => {});

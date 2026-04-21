@@ -43,7 +43,9 @@ export function NotificationWidget({ title, icon, count, storageMb, mails }: Pro
                         {storageMb !== undefined && (
                             <span className="notif-storage-label">{storageMb} MB / 500 MB</span>
                         )}
-                        <span className={`red-badge ${count === 0 ? 'zero' : ''}`}>{count}</span>
+                        <span className={`red-badge ${count === 0 ? 'zero' : ''}`}>
+                            {mails !== undefined && count >= 100 ? '99+' : count}
+                        </span>
                     </div>
                 </div>
                 <div className={`content-window${mails !== undefined ? ' content-window--fixed' : ''}`}>

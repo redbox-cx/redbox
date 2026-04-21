@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { MailService, type MailListItem } from "../services/MailService";
 import { TopBar } from "../components/dashboard/TopBar";
@@ -6,6 +6,7 @@ import { LinksWidget } from "../components/dashboard/LinksWidget";
 import { StorageWidget } from "../components/dashboard/StorageWidget";
 import { NotificationWidget } from "../components/dashboard/NotificationWidget";
 import { BinsWidget } from "../components/dashboard/BinsWidget";
+import { useMailEvents } from "../hooks/useMailEvents";
 
 export function DashBoard() {
     const { user } = useAuth();
@@ -17,14 +18,20 @@ export function DashBoard() {
         return () => { document.documentElement.classList.remove('dash-page'); };
     }, []);
 
-    useEffect(() => {
+    const fetchMails = useCallback(() => {
         MailService.getAll(100, 0, 'unread')
             .then(r => setUnreadMails(r.mails.filter(m => !m.isRead)))
             .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        fetchMails();
         MailService.getStorage()
             .then(s => setMailStorageMb(s.usedMb))
             .catch(() => {});
     }, []);
+
+    useMailEvents(fetchMails);
 
     return (
         <div className="dash-layout">
