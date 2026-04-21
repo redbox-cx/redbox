@@ -4,6 +4,15 @@ import { PrismaService } from 'src/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { AdminChangePasswordDto, AdminLoginDto } from '../dto/auth.dto';
+import { AuditActorType } from '@prisma/client';
+
+type AdminLoginAuditContext = {
+  ipAddress: string | null;
+  ipSource: string | null;
+  userAgent: string | null;
+  forwardedFor: string | null;
+  cfRay: string | null;
+};
 
 @Injectable()
 export class AdminAuthService {
@@ -32,7 +41,7 @@ export class AdminAuthService {
     };
   }
 
-  async login(dto: AdminLoginDto) {
+  async login(dto: AdminLoginDto, auditContext: AdminLoginAuditContext) {
     const adminUser = await this.prismaService.adminUser.findUnique({
       where: { username: dto.username },
     });
@@ -45,6 +54,23 @@ export class AdminAuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid username or password');
     }
+
+    await this.prismaService.adminAuditLog.create({
+      data: {
+        actorType: AuditActorType.ADMIN,
+        adminUserId: adminUser.id,
+        action: 'admin_login',
+        reason: 'Admin logged in',
+        meta: {
+          username: adminUser.username,
+          ipAddress: auditContext.ipAddress,
+          ipSource: auditContext.ipSource,
+          userAgent: auditContext.userAgent,
+          forwardedFor: auditContext.forwardedFor,
+          cfRay: auditContext.cfRay,
+        },
+      },
+    });
 
     return this.getTokens(adminUser.id, adminUser.username, adminUser.sessionKey);
   }
