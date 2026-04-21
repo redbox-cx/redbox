@@ -1,14 +1,23 @@
-import { Controller, Get, Query, Sse, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, Sse, UseGuards } from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
+import type { Request } from 'express';
 import { Observable } from 'rxjs';
+import { GetUserId } from 'src/auth/decorator/get-user.decorator';
+import { AdminDefaultRateLimit } from 'src/common/rate-limit/rate-limit.decorators';
+import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
+import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminLogsQueryDto } from '../dto/logs.dto';
 import { AdminLogsService } from './admin-logs.service';
 
 @Controller('admin')
-@UseGuards(AdminJwtAuthGuard)
+@AdminDefaultRateLimit()
+@UseGuards(AdminJwtAuthGuard, RateLimitGuard)
 export class AdminLogsController {
-  constructor(private readonly adminLogsService: AdminLogsService) {}
+  constructor(
+    private readonly adminLogsService: AdminLogsService,
+    private readonly rateLimitService: RateLimitService,
+  ) {}
 
   @Get('logs/backend')
   getBackendLogs(@Query() query: AdminLogsQueryDto) {
@@ -19,8 +28,20 @@ export class AdminLogsController {
   }
 
   @Sse('logs/backend/stream')
-  getBackendLogStream(): Observable<MessageEvent> {
-    return this.adminLogsService.getBackendLogStream();
+  getBackendLogStream(
+    @GetUserId() adminUserId: string,
+    @Req() request: Request,
+  ): Observable<MessageEvent> {
+    return this.rateLimitService.trackConcurrentSse(
+      this.adminLogsService.getBackendLogStream(),
+      {
+        scope: 'admin:logs:backend:stream',
+        userSubject: adminUserId,
+        userLimit: 2,
+        ipSubject: this.rateLimitService.getClientIp(request),
+        ipLimit: 5,
+      },
+    );
   }
 
   @Get('logs/frontend')
@@ -32,7 +53,19 @@ export class AdminLogsController {
   }
 
   @Sse('logs/frontend/stream')
-  getFrontendLogStream(): Observable<MessageEvent> {
-    return this.adminLogsService.getFrontendLogStream();
+  getFrontendLogStream(
+    @GetUserId() adminUserId: string,
+    @Req() request: Request,
+  ): Observable<MessageEvent> {
+    return this.rateLimitService.trackConcurrentSse(
+      this.adminLogsService.getFrontendLogStream(),
+      {
+        scope: 'admin:logs:frontend:stream',
+        userSubject: adminUserId,
+        userLimit: 2,
+        ipSubject: this.rateLimitService.getClientIp(request),
+        ipLimit: 5,
+      },
+    );
   }
 }

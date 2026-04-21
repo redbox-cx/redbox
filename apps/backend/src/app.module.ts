@@ -12,6 +12,7 @@ import { MailModule } from './mail/mail.module';
 import { ReportsModule } from './reports/reports.module';
 import { BlogModule } from './blog/blog.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
       url: `redis://localhost:6379`, 
     }),
     PrismaModule,
+    RateLimitModule,
     UsersModule,
     AuthModule,
     FilesModule,

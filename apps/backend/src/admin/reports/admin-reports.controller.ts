@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
+import { AdminDefaultRateLimit, RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
+import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminReportsService } from './admin-reports.service';
 import {
@@ -23,7 +25,8 @@ import {
 import { OffsetPaginationQueryDto } from '../dto/common.dto';
 
 @Controller('admin')
-@UseGuards(AdminJwtAuthGuard)
+@AdminDefaultRateLimit()
+@UseGuards(AdminJwtAuthGuard, RateLimitGuard)
 export class AdminReportsController {
   constructor(private readonly adminReportsService: AdminReportsService) {}
 
@@ -81,6 +84,7 @@ export class AdminReportsController {
   }
 
   @Post('reports/:reportId/delete-content')
+  @RateLimit({ name: 'admin:danger:admin', limit: 10, windowSeconds: 10 * 60, subject: 'admin' })
   async deleteReportedContent(
     @GetUserId() adminUserId: string,
     @Param('reportId') reportId: string,
@@ -98,6 +102,7 @@ export class AdminReportsController {
   }
 
   @Post('reports/:reportId/ban-user')
+  @RateLimit({ name: 'admin:danger:admin', limit: 10, windowSeconds: 10 * 60, subject: 'admin' })
   async banReportedUser(
     @GetUserId() adminUserId: string,
     @Param('reportId') reportId: string,

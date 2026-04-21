@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
+import { AdminDefaultRateLimit } from 'src/common/rate-limit/rate-limit.decorators';
+import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import {
   AdminInviteCodesQueryDto,
   CreateAdminInviteCodeDto,
@@ -10,7 +12,8 @@ import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminInvitesService } from './admin-invites.service';
 
 @Controller('admin')
-@UseGuards(AdminJwtAuthGuard)
+@AdminDefaultRateLimit()
+@UseGuards(AdminJwtAuthGuard, RateLimitGuard)
 export class AdminInvitesController {
   constructor(private readonly adminInvitesService: AdminInvitesService) {}
 

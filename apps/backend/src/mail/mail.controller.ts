@@ -10,6 +10,9 @@ import { TransformInterceptor } from 'src/common/interceptors/transform.intercep
 import { timingSafeEqual } from 'crypto';
 import { Observable } from 'rxjs';
 import { MailSseAuthGuard } from './guard/mail-sse-auth.guard';
+import { RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
+import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
+import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
 import {
   BulkMailDto,
   MarkReadDto,
@@ -26,11 +29,13 @@ export class MailController {
   constructor(
     private readonly mailService: MailService,
     private readonly mailEventsService: MailEventsService,
+    private readonly rateLimitService: RateLimitService,
   ) {}
 
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:list:user', limit: 60, windowSeconds: 60, subject: 'user' })
   async listMyMails(
     @GetUserId() userId: string,
     @Query('limit') limit?: string,
@@ -59,7 +64,8 @@ export class MailController {
   }
 
   @Get('blocked-senders')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:blocked-senders:list:user', limit: 60, windowSeconds: 60, subject: 'user' })
   async listBlockedSenders(@GetUserId() userId: string) {
     const result = await this.mailService.getBlockedSenders(userId);
     return { message: 'Blocked senders fetched successfully', result };
@@ -67,12 +73,22 @@ export class MailController {
 
   @Sse('events')
   @UseGuards(MailSseAuthGuard)
-  streamMailEvents(@GetUserId() userId: string): Observable<MessageEvent> {
-    return this.mailEventsService.streamForUser(userId);
+  streamMailEvents(@GetUserId() userId: string, @Req() request: Request): Observable<MessageEvent> {
+    return this.rateLimitService.trackConcurrentSse(
+      this.mailEventsService.streamForUser(userId),
+      {
+        scope: 'mail:events',
+        userSubject: userId,
+        userLimit: 3,
+        ipSubject: this.rateLimitService.getClientIp(request),
+        ipLimit: 5,
+      },
+    );
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:detail:user', limit: 60, windowSeconds: 60, subject: 'user' })
   async getSingleMail(
     @GetUserId() userId: string,
     @Param('id') mailId: string
@@ -83,7 +99,11 @@ export class MailController {
 
 
   @Get(':mailId/attachment/:attachmentId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit(
+    { name: 'mail:attachment:user', limit: 60, windowSeconds: 60, subject: 'user' },
+    { name: 'mail:attachment:attachment-user', limit: 120, windowSeconds: 60 * 60, subject: 'param-user', paramName: 'attachmentId' },
+  )
   async downloadAttachment(
     @GetUserId() userId: string,
     @Param('mailId') mailId: string,
@@ -105,28 +125,32 @@ export class MailController {
   // --- SINGLE ACTIONS ---
 
   @Delete('block-sender')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:block-sender:delete:user', limit: 30, windowSeconds: 60 * 60, subject: 'user' })
   async unblockSender(@GetUserId() userId: string, @Body() dto: BlockSenderDto) {
     const result = await this.mailService.unblockSender(userId, dto.email);
     return { message: 'Sender unblocked successfully', result };
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:actions:user', limit: 30, windowSeconds: 60, subject: 'user' })
   async deleteMail(@GetUserId() userId: string, @Param('id') mailId: string) {
     await this.mailService.deleteMail(userId, mailId);
     return { message: 'Mail deleted successfully' };
   }
 
   @Patch(':id/read-status')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:actions:user', limit: 30, windowSeconds: 60, subject: 'user' })
   async updateReadStatus(@GetUserId() userId: string, @Param('id') mailId: string, @Body() dto: MarkReadDto) {
     await this.mailService.setReadStatus(userId, mailId, dto.isRead);
     return { message: `Mail marked as ${dto.isRead ? 'read' : 'unread'}` };
   }
 
   @Patch(':id/move')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:actions:user', limit: 30, windowSeconds: 60, subject: 'user' })
   async moveMail(@GetUserId() userId: string, @Param('id') mailId: string, @Body() dto: MoveMailDto) {
     const result = await this.mailService.moveMail(userId, mailId, dto.folder);
     return { message: `Mail moved to ${dto.folder} successfully`, result };
@@ -135,21 +159,24 @@ export class MailController {
   // --- BULK ACTIONS ---
 
   @Post('bulk/delete')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:actions:user', limit: 30, windowSeconds: 60, subject: 'user' })
   async bulkDelete(@GetUserId() userId: string, @Body() dto: BulkMailDto) {
     const result = await this.mailService.bulkDeleteMails(userId, dto.mailIds);
     return { message: 'Mails deleted successfully', result };
   }
 
   @Post('bulk/read-status')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:actions:user', limit: 30, windowSeconds: 60, subject: 'user' })
   async bulkReadStatus(@GetUserId() userId: string, @Body() dto: BulkMarkReadDto) {
     const result = await this.mailService.bulkSetReadStatus(userId, dto.mailIds, dto.isRead);
     return { message: `Mails marked as ${dto.isRead ? 'read' : 'unread'}`, result };
   }
 
   @Post('bulk/move')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:actions:user', limit: 30, windowSeconds: 60, subject: 'user' })
   async bulkMove(@GetUserId() userId: string, @Body() dto: BulkMoveMailDto) {
     const result = await this.mailService.bulkMoveMails(userId, dto.mailIds, dto.folder);
     return { message: `Mails moved to ${dto.folder} successfully`, result };
@@ -158,14 +185,16 @@ export class MailController {
   // --- SENDER BLOCKING ---
 
   @Post('block-sender')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:block-sender:create:user', limit: 30, windowSeconds: 60 * 60, subject: 'user' })
   async blockSender(@GetUserId() userId: string, @Body() dto: BlockSenderDto) {
     const result = await this.mailService.blockSender(userId, dto.email);
     return { message: 'Sender blocked successfully', result };
   }
 
   @Post('bulk/unblock-sender')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ name: 'mail:block-sender:bulk-unblock:user', limit: 30, windowSeconds: 60 * 60, subject: 'user' })
   async bulkUnblockSenders(@GetUserId() userId: string, @Body() dto: BulkUnblockSenderDto) {
     const result = await this.mailService.bulkUnblockSenders(userId, dto.emails);
     return { message: 'Blocked senders unblocked successfully', result };
@@ -175,6 +204,11 @@ export class MailController {
   // --- INCOMING WEBHOOK ---
   // using timingSafeEqual to prevent attackers from guessing the passphrase with respondtime
   @Post('incoming')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(
+    { name: 'mail:incoming:ip', limit: 120, windowSeconds: 60 * 60, subject: 'ip' },
+    { name: 'mail:incoming:recipient', limit: 30, windowSeconds: 60 * 60, subject: 'mail-recipient' },
+  )
   async receiveMail(@Req() req: Request, @Body() dto: IncomingMailDto) {
     
     const webhookSecret = req.headers['x-redbox-webhook-secret'];

@@ -4,7 +4,8 @@ import {
     Param, Res, 
     Query,
     StreamableFile,
-    BadRequestException
+    BadRequestException,
+    Req
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService, storageConfig } from './files.service';
@@ -14,15 +15,23 @@ import type { Response } from 'express';
 import { InitUploadDto } from './dto/init-upload.dto';
 import { UploadChunkDto } from './dto/upload-chunk.dto';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
+import { RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
+import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
+import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
+import type { Request } from 'express';
 
 @Controller('files')
 export class FilesController {
-    constructor(private readonly filesService: FilesService) {}
+    constructor(
+        private readonly filesService: FilesService,
+        private readonly rateLimitService: RateLimitService,
+    ) {}
 
 
     // get my files and quota
     @Get()
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RateLimitGuard)
+    @RateLimit({ name: 'files:list:user', limit: 60, windowSeconds: 60, subject: 'user' })
     async listMyFiles(@GetUserId() userId: string) {
         const result = await this.filesService.getUserFilesWithQuota(userId);
         return { message: 'Files fetched successfully', result };
@@ -31,7 +40,11 @@ export class FilesController {
 
     // handshake start
     @Post('init')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RateLimitGuard)
+    @RateLimit(
+        { name: 'files:init:user', limit: 30, windowSeconds: 60 * 60, subject: 'user' },
+        { name: 'files:init:ip', limit: 60, windowSeconds: 60 * 60, subject: 'ip' },
+    )
     async init(@GetUserId() userId: string, @Body() dto: InitUploadDto) {
         const result = await this.filesService.initializeUpload(
             userId, 
@@ -49,7 +62,8 @@ export class FilesController {
 
     // send chunks
     @Patch('upload/:uploadId')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RateLimitGuard)
+    @RateLimit({ name: 'files:upload:user-upload', limit: 240, windowSeconds: 60 * 60, subject: 'param-user', paramName: 'uploadId' })
     @UseInterceptors(FileInterceptor('file', storageConfig))
     async uploadChunk(
         @GetUserId() userId: string,
@@ -62,7 +76,8 @@ export class FilesController {
 
     // merge chunks
     @Post('complete')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RateLimitGuard)
+    @RateLimit({ name: 'files:complete:user', limit: 40, windowSeconds: 60 * 60, subject: 'user' })
     async complete(
         @GetUserId() userId: string, 
         @Body() dto: CompleteUploadDto
@@ -83,7 +98,8 @@ export class FilesController {
 
     // delete endpoint
     @Delete(':id')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RateLimitGuard)
+    @RateLimit({ name: 'files:delete:user', limit: 30, windowSeconds: 60, subject: 'user' })
     async delete(@GetUserId() userId: string, @Param('id') fileId: string) {
         await this.filesService.deleteFile(userId, fileId);
         return { message: 'File deleted successfully' };
@@ -91,14 +107,25 @@ export class FilesController {
 
     // download endpoint
     @Get('download/:id')
+    @UseGuards(RateLimitGuard)
+    @RateLimit(
+        { name: 'files:download:ip', limit: 40, windowSeconds: 60, subject: 'ip' },
+        { name: 'files:download:file-ip', limit: 120, windowSeconds: 60 * 60, subject: 'param-ip', paramName: 'id' },
+    )
     async download(
         @Param('id') id: string,
         @Query('token') token: string,
         @Res({ passthrough: true }) res: Response,
+        @Req() request: Request,
         @Query('password') password?: string
     ) {
         if (!token) throw new BadRequestException('Share token is required');
-        const fileData = await this.filesService.downloadFile(id, token, password);
+        const fileData = await this.filesService.downloadFile(
+            id,
+            token,
+            password,
+            this.rateLimitService.getClientIp(request),
+        );
         // ASCII-safe fallback + RFC 5987 encoded name so browsers preserve the real filename
         const safeName = fileData.fileName.replace(/[^\w.\-]/g, '_');
         const encodedName = encodeURIComponent(fileData.fileName);

@@ -9,6 +9,8 @@ import { ReactivateAccountDto } from "./dto/reactivate-account.dto";
 import { AuthGuard } from "@nestjs/passport";
 import { JwtAuthGuard } from "./guard/auth.guard";
 import { GetUserId, GetUser } from "./decorator/get-user.decorator";
+import { RateLimit } from "src/common/rate-limit/rate-limit.decorators";
+import { RateLimitGuard } from "src/common/rate-limit/rate-limit.guard";
 
 
 
@@ -19,6 +21,11 @@ export class AuthController{
 
 
     @Post('/login')
+    @UseGuards(RateLimitGuard)
+    @RateLimit(
+        { name: 'auth:login:username-ip', limit: 5, windowSeconds: 60, subject: 'username-ip' },
+        { name: 'auth:login:ip', limit: 20, windowSeconds: 15 * 60, subject: 'ip' },
+    )
     async login(@Body() loginDto: LoginDto) {
         const result = await this.authService.login(loginDto);
         return {
@@ -30,12 +37,22 @@ export class AuthController{
     }
 
     @Post('/pre-validate')
+    @UseGuards(RateLimitGuard)
+    @RateLimit(
+        { name: 'auth:pre-validate:ip', limit: 10, windowSeconds: 10 * 60, subject: 'ip' },
+        { name: 'auth:pre-validate:username-ip', limit: 5, windowSeconds: 10 * 60, subject: 'username-ip' },
+    )
     async preValidate(@Body() dto: PreValidateDto) {
         await this.authService.preValidate(dto.username, dto.inviteCode);
         return { message: 'Credentials valid' };
     }
 
     @Post('/register')
+    @UseGuards(RateLimitGuard)
+    @RateLimit(
+        { name: 'auth:register:ip-hour', limit: 3, windowSeconds: 60 * 60, subject: 'ip' },
+        { name: 'auth:register:ip-day', limit: 10, windowSeconds: 24 * 60 * 60, subject: 'ip' },
+    )
     async register(@Body() registerDto: RegisterUsersDto) {
         const result = await this.authService.register(registerDto);
         return {
@@ -46,7 +63,8 @@ export class AuthController{
 
 
     @Post('/refresh')
-    @UseGuards(AuthGuard('jwt-refresh'))
+    @UseGuards(AuthGuard('jwt-refresh'), RateLimitGuard)
+    @RateLimit({ name: 'auth:refresh:user', limit: 30, windowSeconds: 60, subject: 'user' })
     async refresh(
         @GetUserId() userId: string,
         @GetUser('sessionKey') sessionKey: string
@@ -70,7 +88,8 @@ export class AuthController{
 
 
     @Post('/password')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RateLimitGuard)
+    @RateLimit({ name: 'auth:password:user', limit: 5, windowSeconds: 15 * 60, subject: 'user' })
     async changePassword(
         @GetUserId() userId: string, 
         @Body() dto: ChangePasswordDto
@@ -79,6 +98,8 @@ export class AuthController{
     }
 
     @Get('/recovery-phrase/generate')
+    @UseGuards(RateLimitGuard)
+    @RateLimit({ name: 'auth:recovery-phrase:ip', limit: 30, windowSeconds: 60, subject: 'ip' })
     generatePhrase() {
         const data = this.authService.generateRecoveryPhrase();
         return {
@@ -88,6 +109,11 @@ export class AuthController{
     }
 
     @Post('/recover-password')
+    @UseGuards(RateLimitGuard)
+    @RateLimit(
+        { name: 'auth:recover-password:username-ip', limit: 3, windowSeconds: 15 * 60, subject: 'username-ip' },
+        { name: 'auth:recover-password:ip', limit: 10, windowSeconds: 60 * 60, subject: 'ip' },
+    )
     async recoverPassword(@Body() dto: RecoverPasswordDto) {
         const result = await this.authService.recoverPassword(dto);
         return {
@@ -97,6 +123,8 @@ export class AuthController{
     }
 
     @Post('/account/reactivate')
+    @UseGuards(RateLimitGuard)
+    @RateLimit({ name: 'auth:account-reactivate:ip', limit: 5, windowSeconds: 15 * 60, subject: 'ip' })
     async reactivateAccount(@Body() dto: ReactivateAccountDto) {
         const result = await this.authService.reactivateAccount(dto.reactivationToken);
         return {

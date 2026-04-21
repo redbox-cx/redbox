@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { PrismaModule } from '../prisma.module';
+import { RateLimitModule } from '../common/rate-limit/rate-limit.module';
 import { AdminAuthModule } from './auth/admin-auth.module';
 import { AdminAuditModule } from './audit/admin-audit.module';
 import { AdminBlogModule } from './blog/admin-blog.module';
@@ -22,6 +23,7 @@ import { AdminUsersModule } from './users/admin-users.module';
       url: 'redis://localhost:6379',
     }),
     PrismaModule,
+    RateLimitModule,
     AdminAuthModule,
     AdminUsersModule,
     AdminAuditModule,

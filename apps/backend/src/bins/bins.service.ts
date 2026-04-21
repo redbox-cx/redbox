@@ -14,6 +14,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { addDays, addHours } from 'date-fns';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { CreateBinDto } from './dto/create-bin.dto';
+import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
 
 @Injectable()
 export class BinsService {
@@ -21,7 +22,8 @@ export class BinsService {
 
     constructor(
         private prisma: PrismaService,
-        @InjectRedis() private readonly redis: Redis
+        @InjectRedis() private readonly redis: Redis,
+        private readonly rateLimitService: RateLimitService,
     ) {}
 
     private get binLimit(): number {
@@ -129,7 +131,7 @@ export class BinsService {
     }
 
 
-    async getBinContent(binId: string, token: string, providedPassword?: string) {
+    async getBinContent(binId: string, token: string, providedPassword?: string, clientIp = 'unknown') {
         const bin = await this.prisma.bin.findUnique({ where: { id: binId } });
 
         if (!bin || bin.shareToken !== token) {
@@ -145,8 +147,27 @@ export class BinsService {
         // password-gatekeeper
         if (bin.passwordHash) {
             if (!providedPassword) throw new ForbiddenException('This bin is password protected');
+            const passwordAttemptSubject = `bin:${bin.id}:ip:${clientIp}`;
+            await this.rateLimitService.assertAvailable(
+                'bins:get:password-failure',
+                passwordAttemptSubject,
+                10,
+                15 * 60,
+            );
             const isMatch = await bcrypt.compare(providedPassword, bin.passwordHash);
-            if (!isMatch) throw new ForbiddenException('Incorrect password');
+            if (!isMatch) {
+                await this.rateLimitService.consumeAttempt(
+                    'bins:get:password-failure',
+                    passwordAttemptSubject,
+                    10,
+                    15 * 60,
+                );
+                throw new ForbiddenException('Incorrect password');
+            }
+            await this.rateLimitService.clearAttempts(
+                'bins:get:password-failure',
+                passwordAttemptSubject,
+            );
         }
 
 

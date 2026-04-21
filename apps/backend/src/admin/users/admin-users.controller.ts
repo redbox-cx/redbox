@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
+import { AdminDefaultRateLimit, RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
+import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminUsersService } from './admin-users.service';
 import {
@@ -12,7 +14,8 @@ import {
 } from '../dto/users.dto';
 
 @Controller('admin')
-@UseGuards(AdminJwtAuthGuard)
+@AdminDefaultRateLimit()
+@UseGuards(AdminJwtAuthGuard, RateLimitGuard)
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
 
@@ -104,6 +107,7 @@ export class AdminUsersController {
   }
 
   @Delete('users/:userId/files')
+  @RateLimit({ name: 'admin:danger:admin', limit: 10, windowSeconds: 10 * 60, subject: 'admin' })
   async deleteUserFiles(
     @GetUserId() adminUserId: string,
     @Param('userId') userId: string,
@@ -116,6 +120,7 @@ export class AdminUsersController {
   }
 
   @Delete('users/:userId/data')
+  @RateLimit({ name: 'admin:danger:admin', limit: 10, windowSeconds: 10 * 60, subject: 'admin' })
   async clearUserData(
     @GetUserId() adminUserId: string,
     @Param('userId') userId: string,

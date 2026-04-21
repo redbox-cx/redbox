@@ -1,11 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
+import { AdminDefaultRateLimit, RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
+import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { AdminBlogQueryDto, SaveAdminBlogPostDto, UpdateAdminBlogPostDto } from '../dto/blog.dto';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminBlogService } from './admin-blog.service';
 
 @Controller('admin')
-@UseGuards(AdminJwtAuthGuard)
+@AdminDefaultRateLimit()
+@UseGuards(AdminJwtAuthGuard, RateLimitGuard)
 export class AdminBlogController {
   constructor(private readonly adminBlogService: AdminBlogService) {}
 
@@ -100,6 +103,7 @@ export class AdminBlogController {
   }
 
   @Delete('blog/:postId')
+  @RateLimit({ name: 'admin:danger:admin', limit: 10, windowSeconds: 10 * 60, subject: 'admin' })
   async deleteBlogPost(@GetUserId() adminUserId: string, @Param('postId') postId: string) {
     const result = await this.adminBlogService.deleteBlogPost(adminUserId, postId);
     return {

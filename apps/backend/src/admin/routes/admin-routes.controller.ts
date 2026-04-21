@@ -1,10 +1,13 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { AdminDefaultRateLimit } from 'src/common/rate-limit/rate-limit.decorators';
+import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { PauseAdminRouteDto } from '../dto/routes.dto';
 import { AdminRoutesService } from './admin-routes.service';
 
 @Controller('admin')
-@UseGuards(AdminJwtAuthGuard)
+@AdminDefaultRateLimit()
+@UseGuards(AdminJwtAuthGuard, RateLimitGuard)
 export class AdminRoutesController {
   constructor(private readonly adminRoutesService: AdminRoutesService) {}
 
