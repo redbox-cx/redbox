@@ -40,6 +40,17 @@ type SharedInternalAttachmentInput = {
   size: number;
 };
 
+const ADMIN_INCOMING_MAIL_ALIASES = new Set([
+  'admin@redbox.cx',
+  'support@redbox.cx',
+  'contact@redbox.cx',
+  'no-reply@redbox.cx',
+  'help@redbox.cx',
+  'team@redbox.cx',
+  'moderation@redbox.cx',
+  'about@redbox.cx',
+]);
+
 @Injectable()
 export class MailService {
 
@@ -688,8 +699,8 @@ export class MailService {
   // --- INCOMING MAIL ---
   async processIncomingMail(dto: IncomingMailDto) {
     const emailMatch = dto.to.match(/<([^>]+)>/);
-    const cleanEmail = emailMatch ? emailMatch[1] : dto.to;
-    const username = cleanEmail.split('@')[0].toLowerCase().trim();
+    const cleanEmail = (emailMatch ? emailMatch[1] : dto.to).toLowerCase().trim();
+    const username = this.resolveIncomingMailboxUsername(cleanEmail);
 
     if (username.includes('*')) {
       this.logger.warn(`Ignored external mail with broadcast recipient: ${cleanEmail}`);
@@ -753,8 +764,18 @@ export class MailService {
       source: 'external',
     });
 
-    this.logger.log(`Email from ${dto.from} for user '${username}' saved (Attachments: ${preparedAttachments.length})`);
+    this.logger.log(
+      `Email from ${dto.from} for user '${username}' saved (Recipient: ${cleanEmail}, Attachments: ${preparedAttachments.length})`,
+    );
     return { status: 'success', mailId: mail.id };
+  }
+
+  private resolveIncomingMailboxUsername(cleanEmail: string) {
+    if (ADMIN_INCOMING_MAIL_ALIASES.has(cleanEmail)) {
+      return 'admin';
+    }
+
+    return cleanEmail.split('@')[0].toLowerCase().trim();
   }
 
   private async storeMailboxMailForUser(user: MailboxUser, input: StoredMailboxMailInput) {
