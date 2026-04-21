@@ -25,6 +25,7 @@ interface Props {
     selectedId: string | null;
     mobileView: 'list' | 'detail';
     mailStorageMb: number;
+    blockedSenders: Set<string>;
     user: { username?: string; avatar?: string } | null;
     userEmail: string;
     isAllChecked: boolean;
@@ -43,12 +44,16 @@ interface Props {
 
 export function MailListPanel({
     mails, loading, folder, search, sort, page, totalPages,
-    checkedIds, selectedId, mobileView, mailStorageMb, user, userEmail,
+    checkedIds, selectedId, mobileView, mailStorageMb, blockedSenders, user, userEmail,
     isAllChecked, anyChecked,
     onFolderChange, onSearchChange, onSortChange, onToggleCheck, onToggleAll,
     onSelect, onChangePage, onBulkDelete, onBulkReadStatus, onBulkMove,
 }: Props) {
     const [sortOpen, setSortOpen] = useState(false);
+
+    const checkedMails = mails.filter(m => checkedIds.has(m.id));
+    const canMarkRead   = checkedMails.some(m => !m.isRead);
+    const canMarkUnread = checkedMails.some(m => m.isRead);
     const [copiedEmail, setCopiedEmail] = useState(false);
     const [gearRot, setGearRot] = useState(0);
     const sortRef = useRef<HTMLDivElement>(null);
@@ -108,9 +113,19 @@ export function MailListPanel({
                     {anyChecked ? (
                         <div className="mc-toolbar-actions">
                             <span className="mc-selected-label">{checkedIds.size} selected</span>
-                            <button className="mc-tool-btn" title="Mark as read" onClick={() => onBulkReadStatus(true)}><i className="bi bi-envelope-open" /></button>
-                            <button className="mc-tool-btn" title="Mark as unread" onClick={() => onBulkReadStatus(false)}><i className="bi bi-envelope" /></button>
-                            <button className="mc-tool-btn" title="Archive" onClick={() => onBulkMove('archive')}><i className="bi bi-archive" /></button>
+                            <button className="mc-tool-btn" title="Mark as read" onClick={() => onBulkReadStatus(true)} disabled={!canMarkRead}><i className="bi bi-envelope-open" /></button>
+                            <button className="mc-tool-btn" title="Mark as unread" onClick={() => onBulkReadStatus(false)} disabled={!canMarkUnread}><i className="bi bi-envelope" /></button>
+                            {folder === 'inbox' && (
+                                <button className="mc-tool-btn" title="Archive" onClick={() => onBulkMove('archive')}><i className="bi bi-archive" /></button>
+                            )}
+                            {folder !== 'spam' ? (
+                                <button className="mc-tool-btn" title="Mark as spam" onClick={() => onBulkMove('spam')}><i className="bi bi-exclamation-triangle" /></button>
+                            ) : (
+                                <button className="mc-tool-btn" title="Not spam" onClick={() => onBulkMove('inbox')}><i className="bi bi-inbox" /></button>
+                            )}
+                            {folder === 'archive' && (
+                                <button className="mc-tool-btn" title="Move to inbox" onClick={() => onBulkMove('inbox')}><i className="bi bi-inbox" /></button>
+                            )}
                             <button className="mc-tool-btn danger" title="Delete" onClick={onBulkDelete}><i className="bi bi-trash3" /></button>
                         </div>
                     ) : (
@@ -146,10 +161,11 @@ export function MailListPanel({
                         <div className="empty-bins"><i className="bi bi-inbox" /><span>{search ? 'No results' : 'Your inbox is empty'}</span></div>
                     ) : mails.map(mail => {
                         const sender = parseSender(mail.from);
+                        const isBlockedSender = blockedSenders.has(sender.email);
                         return (
                             <div
                                 key={mail.id}
-                                className={`mc-mail-row ${selectedId === mail.id ? 'mc-mail-row--active' : ''} ${!mail.isRead ? 'mc-mail-row--unread' : ''}`}
+                                className={`mc-mail-row ${selectedId === mail.id ? 'mc-mail-row--active' : ''} ${!mail.isRead ? 'mc-mail-row--unread' : ''} ${isBlockedSender ? 'mc-mail-row--blocked' : ''}`}
                                 onClick={() => onSelect(mail)}
                             >
                                 <label className="mc-checkbox-wrap" onClick={e => onToggleCheck(mail.id, e)}>

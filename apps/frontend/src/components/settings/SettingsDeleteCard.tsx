@@ -35,7 +35,7 @@ export function SettingsDeleteCard({ onLogout }: Props) {
                 <h2 className="settings-section-title">
                     <i className="bi bi-trash3" style={{ color: 'var(--color-primary)' }} /> Delete Account
                 </h2>
-                <p className="settings-profile-since" style={{ margin: 0 }}>
+                <p className="settings-profile-since" style={{ margin: 0, fontWeight: 400 }}>
                     This will schedule your account for permanent deletion. You will have a grace period to log back in and cancel. All your files, mails, links, and bins will be removed.
                 </p>
                 <button className="settings-delete-btn" onClick={openModal}>

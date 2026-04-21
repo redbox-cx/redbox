@@ -49,7 +49,7 @@ export function NotificationWidget({ title, icon, count, storageMb, mails }: Pro
                 <div className={`content-window${mails !== undefined ? ' content-window--fixed' : ''}`}>
                     <div className={`content-list ${!isSlidDown ? 'is-blurred' : ''}`}>
                         {hasMails ? (
-                            <div className="notif-mail-list">
+                            <div className={`notif-mail-list ${!isSlidDown ? 'notif-mail-list--slid' : ''}`}>
                                 {mails!.slice(0, 6).map(mail => (
                                     <div
                                         key={mail.id}

@@ -27,6 +27,7 @@ export function MailPage() {
     const [mailStorageMb, setMailStorageMb] = useState(0);
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
+    const [blockedSenders, setBlockedSenders] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         document.documentElement.classList.add('dash-page', 'mail-page');
@@ -52,6 +53,7 @@ export function MailPage() {
 
     useEffect(() => {
         MailService.getStorage().then(s => setMailStorageMb(s.usedMb)).catch(() => {});
+        MailService.getBlockedSenders().then(list => setBlockedSenders(new Set(list))).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -134,7 +136,13 @@ export function MailPage() {
     };
 
     const handleBlockSender = async (email: string) => {
-        try { await MailService.blockSender(email); } catch {}
+        await MailService.blockSender(email);
+        setBlockedSenders(prev => new Set([...prev, email]));
+    };
+
+    const handleUnblockSender = async (email: string) => {
+        await MailService.unblockSender(email);
+        setBlockedSenders(prev => { const next = new Set(prev); next.delete(email); return next; });
     };
 
     const handleBulkDelete = async () => {
@@ -193,6 +201,7 @@ export function MailPage() {
                     selectedId={selected?.id ?? null}
                     mobileView={mobileView}
                     mailStorageMb={mailStorageMb}
+                    blockedSenders={blockedSenders}
                     user={user}
                     userEmail={userEmail}
                     isAllChecked={isAllChecked}
@@ -213,10 +222,13 @@ export function MailPage() {
                     loadingDetail={loadingDetail}
                     downloadingId={downloadingId}
                     mobileView={mobileView}
+                    folder={folder}
+                    blockedSenders={blockedSenders}
                     onBack={() => { setSelected(null); setMobileView('list'); }}
                     onReadStatus={handleReadStatus}
                     onMove={handleMove}
                     onBlockSender={handleBlockSender}
+                    onUnblockSender={handleUnblockSender}
                     onDelete={handleDelete}
                     onDownloadAttachment={handleDownloadAttachment}
                 />

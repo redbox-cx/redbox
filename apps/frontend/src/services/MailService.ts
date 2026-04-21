@@ -55,6 +55,15 @@ export const MailService = {
         await apiClient.post('/mail/block-sender', { email });
     },
 
+    async getBlockedSenders(): Promise<string[]> {
+        const { data } = await apiClient.get('/mail/blocked-senders');
+        return (data.result?.blockedSenders ?? []).map((s: { email: string }) => s.email);
+    },
+
+    async unblockSender(email: string): Promise<void> {
+        await apiClient.delete('/mail/block-sender', { data: { email } });
+    },
+
     async bulkDelete(mailIds: string[]): Promise<void> {
         await apiClient.post('/mail/bulk/delete', { mailIds });
     },

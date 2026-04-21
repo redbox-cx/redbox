@@ -6,6 +6,7 @@ import { SettingsAvatarCard } from '../components/settings/SettingsAvatarCard';
 import { SettingsPasswordCard } from '../components/settings/SettingsPasswordCard';
 import { SettingsInvitesCard } from '../components/settings/SettingsInvitesCard';
 import { SettingsDeleteCard } from '../components/settings/SettingsDeleteCard';
+import { SettingsBlockedSendersCard } from '../components/settings/SettingsBlockedSendersCard';
 
 export function Settings() {
     const { user, updateUser, logout } = useAuth();
@@ -31,6 +32,7 @@ export function Settings() {
                     <SettingsAvatarCard currentAvatar={user?.avatar} onSaved={avatar => updateUser({ avatar })} />
                     <SettingsPasswordCard onLogout={logout} />
                     <SettingsInvitesCard />
+                    <SettingsBlockedSendersCard />
                     <SettingsDeleteCard onLogout={logout} />
                 </div>
             </main>

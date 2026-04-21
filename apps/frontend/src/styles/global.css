@@ -1878,7 +1878,13 @@ html.dash-page {
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(0,0,0,0.1) transparent;
-    padding-bottom: calc(44px + 52px);
+    padding-top: 0;
+    padding-bottom: calc(4px + 2px);
+    transition: padding-top 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.notif-mail-list.notif-mail-list--slid {
+    padding-top: 40px;
 }
 
 .notif-mail-item {
@@ -1964,7 +1970,7 @@ html.dash-page {
     text-align: center;
     font-size: 0.72rem;
     color: #94a3b8;
-    padding: 8px 6px;
+    padding: 8px 6px 52px;
     letter-spacing: 0.02em;
 }
 
@@ -2016,7 +2022,6 @@ html.dash-page {
      transition: filter 0.4s ease;
      overflow: hidden;
      min-height: 0;
-     padding-bottom: 44px;
 }
  .empty-state {
      margin: auto;
@@ -2026,6 +2031,7 @@ html.dash-page {
      justify-content: center;
      text-align: center;
      padding: clamp(10px, 1.8dvh, 20px);
+     padding-bottom: calc(clamp(10px, 1.8dvh, 20px) + 44px);
 }
  .empty-icon-circle {
      width: clamp(40px, 6.5dvh, 60px);
@@ -2074,6 +2080,9 @@ html.dash-page {
 
 .glass-slider.slid-down {
     transform: translateY(calc(100% - 40px));
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .slider-handle {
@@ -5734,6 +5743,9 @@ html.dash-page {
 .mc-mail-row:hover { background: rgba(255,255,255,0.35); }
 .mc-mail-row--active { background: rgba(255,255,255,0.25) !important; }
 .mc-mail-row--unread .mc-row-from { font-weight: 700; color: var(--color-text); }
+.mc-mail-row--blocked { background: rgba(220,50,50,0.08); }
+.mc-mail-row--blocked:hover { background: rgba(220,50,50,0.14); }
+.mc-mail-row--blocked.mc-mail-row--active { background: rgba(220,50,50,0.18) !important; }
 
 .mc-sender-avatar {
     width: 36px;
@@ -6170,6 +6182,19 @@ html.dash-page {
     color: var(--color-text-muted);
 }
 
+.mc-blocked-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #dc3232;
+    background: rgba(220,50,50,0.12);
+    border-radius: 20px;
+    padding: 2px 8px;
+    width: fit-content;
+}
+
 .mc-detail-ts {
     font-size: 0.75rem;
     color: var(--color-text-muted);
@@ -6332,6 +6357,143 @@ html.dash-page {
 }
 
 .mc-back-btn:hover { color: var(--color-text); }
+
+/* --- Block Sender Modal --- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.modal-box {
+    background: #fff;
+    border-radius: 20px;
+    padding: 28px 28px 22px;
+    width: 90%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--color-contrast);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+}
+
+.modal-close-btn:hover { color: var(--color-contrast); }
+
+.modal-body { font-size: 0; }
+
+.block-sender-desc {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+}
+
+.block-sender-desc strong { color: var(--color-contrast); }
+
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.modal-cancel-btn {
+    padding: 9px 18px;
+    border-radius: 10px;
+    border: 1.5px solid rgba(0,0,0,0.12);
+    background: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.modal-cancel-btn:hover { background: rgba(0,0,0,0.05); }
+
+.modal-confirm-btn {
+    padding: 9px 18px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.modal-confirm-btn.danger {
+    background: #e03131;
+    color: #fff;
+}
+
+.modal-confirm-btn.danger:hover { background: #c92a2a; }
+.modal-confirm-btn:disabled, .modal-cancel-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Blocked sender item in settings */
+.blocked-senders-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 4px;
+    max-height: 248px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.15) transparent;
+    background: rgba(0,0,0,0.04);
+    border-radius: 14px;
+    padding: 8px;
+}
+
+.blocked-sender-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--glass-bg);
+    border-radius: 10px;
+    border: 1px solid var(--glass-border);
+}
+
+.blocked-sender-email {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--color-contrast);
+    word-break: break-all;
+}
 
 @media (max-width: 900px) {
     .mc-app {

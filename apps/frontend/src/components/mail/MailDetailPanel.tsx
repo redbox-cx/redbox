@@ -1,25 +1,56 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { MailDetail, MailFolder, MailAttachment } from '../../services/MailService';
 import { senderColor, senderInitial, parseSender, formatFull, formatBytes, attachmentIcon } from './mailUtils';
+import { BlockSenderModal } from './BlockSenderModal';
 
 interface Props {
     selected: MailDetail | null;
     loadingDetail: boolean;
     downloadingId: string | null;
     mobileView: 'list' | 'detail';
+    folder: MailFolder;
+    blockedSenders: Set<string>;
     onBack: () => void;
     onReadStatus: (id: string, isRead: boolean) => void;
     onMove: (id: string, dest: MailFolder) => void;
-    onBlockSender: (email: string) => void;
+    onBlockSender: (email: string) => Promise<void>;
+    onUnblockSender: (email: string) => Promise<void>;
     onDelete: (id: string) => void;
     onDownloadAttachment: (att: MailAttachment) => void;
 }
 
 export function MailDetailPanel({
-    selected, loadingDetail, downloadingId, mobileView,
-    onBack, onReadStatus, onMove, onBlockSender, onDelete, onDownloadAttachment,
+    selected, loadingDetail, downloadingId, mobileView, folder, blockedSenders,
+    onBack, onReadStatus, onMove, onBlockSender, onUnblockSender, onDelete, onDownloadAttachment,
 }: Props) {
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [showBlockModal, setShowBlockModal] = useState(false);
+    const [isBlocking, setIsBlocking] = useState(false);
+    const [isUnblocking, setIsUnblocking] = useState(false);
+
+    const senderEmail = selected ? parseSender(selected.from).email : '';
+    const isBlocked = blockedSenders.has(senderEmail);
+
+    const handleBlockConfirm = async () => {
+        if (!selected || isBlocking) return;
+        setIsBlocking(true);
+        try {
+            await onBlockSender(senderEmail);
+            setShowBlockModal(false);
+        } finally {
+            setIsBlocking(false);
+        }
+    };
+
+    const handleUnblock = async () => {
+        if (!selected || isUnblocking) return;
+        setIsUnblocking(true);
+        try {
+            await onUnblockSender(senderEmail);
+        } finally {
+            setIsUnblocking(false);
+        }
+    };
 
     const handleIframeLoad = () => {
         const iframe = iframeRef.current;
@@ -50,16 +81,46 @@ export function MailDetailPanel({
                             <i className={`bi bi-envelope${selected?.isRead ? '' : '-open'}`} />
                             <span className="mc-view-tooltip">{selected?.isRead ? 'Mark unread' : 'Mark read'}</span>
                         </button>
-                        <button className="mc-view-btn" disabled={!selected}
-                            onClick={() => selected && onMove(selected.id, 'archive')}>
-                            <i className="bi bi-archive" />
-                            <span className="mc-view-tooltip">Archive</span>
-                        </button>
-                        <button className="mc-view-btn" disabled={!selected}
-                            onClick={() => { if (selected) { const s = parseSender(selected.from); onBlockSender(s.email); } }}>
-                            <i className="bi bi-slash-circle" />
-                            <span className="mc-view-tooltip">Block sender</span>
-                        </button>
+                        {folder === 'inbox' && (
+                            <button className="mc-view-btn" disabled={!selected}
+                                onClick={() => selected && onMove(selected.id, 'archive')}>
+                                <i className="bi bi-archive" />
+                                <span className="mc-view-tooltip">Archive</span>
+                            </button>
+                        )}
+                        {folder !== 'spam' ? (
+                            <button className="mc-view-btn" disabled={!selected}
+                                onClick={() => selected && onMove(selected.id, 'spam')}>
+                                <i className="bi bi-exclamation-triangle" />
+                                <span className="mc-view-tooltip">Mark as spam</span>
+                            </button>
+                        ) : (
+                            <button className="mc-view-btn" disabled={!selected}
+                                onClick={() => selected && onMove(selected.id, 'inbox')}>
+                                <i className="bi bi-inbox" />
+                                <span className="mc-view-tooltip">Not spam</span>
+                            </button>
+                        )}
+                        {folder === 'archive' && (
+                            <button className="mc-view-btn" disabled={!selected}
+                                onClick={() => selected && onMove(selected.id, 'inbox')}>
+                                <i className="bi bi-inbox" />
+                                <span className="mc-view-tooltip">Move to inbox</span>
+                            </button>
+                        )}
+                        {isBlocked ? (
+                            <button className="mc-view-btn" disabled={!selected || isUnblocking}
+                                onClick={handleUnblock}>
+                                <i className={`bi bi-${isUnblocking ? 'hourglass-split' : 'person-check'}`} />
+                                <span className="mc-view-tooltip">Unblock sender</span>
+                            </button>
+                        ) : (
+                            <button className="mc-view-btn" disabled={!selected || isBlocking}
+                                onClick={() => setShowBlockModal(true)}>
+                                <i className="bi bi-slash-circle" />
+                                <span className="mc-view-tooltip">Block sender</span>
+                            </button>
+                        )}
                         <button className="mc-view-btn danger" disabled={!selected}
                             onClick={() => selected && onDelete(selected.id)}>
                             <i className="bi bi-trash3" />
@@ -85,6 +146,7 @@ export function MailDetailPanel({
                                             <>
                                                 {s.name !== s.email && <span className="mc-detail-sender-name">{s.name}</span>}
                                                 <span className="mc-detail-sender-email">{s.email}</span>
+                                                {isBlocked && <span className="mc-blocked-badge"><i className="bi bi-slash-circle" /> Blocked</span>}
                                             </>
                                         );
                                     })()}
@@ -135,6 +197,15 @@ export function MailDetailPanel({
                     </div>
                 )}
             </div>
+
+            {showBlockModal && senderEmail && (
+                <BlockSenderModal
+                    email={senderEmail}
+                    onConfirm={handleBlockConfirm}
+                    onCancel={() => setShowBlockModal(false)}
+                    loading={isBlocking}
+                />
+            )}
         </div>
     );
 }
