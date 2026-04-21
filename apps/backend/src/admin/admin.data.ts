@@ -100,9 +100,12 @@ export interface AdminMailTemplate {
 }
 
 export interface AdminMailAttachment {
+  id?: string;
   name: string;
   size: number;
   type: string;
+  downloadUrl?: string | null;
+  isDownloadable?: boolean;
 }
 
 export interface AdminMailRecord {

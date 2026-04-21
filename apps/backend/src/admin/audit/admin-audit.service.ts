@@ -50,36 +50,55 @@ export class AdminAuditService {
               username: true,
             },
           },
+          adminUser: {
+            select: {
+              username: true,
+            },
+          },
         },
       }),
       this.prismaService.adminAuditLog.count({ where }),
     ]);
 
     return {
-      items: items.map((item) => ({
-        id: item.id,
-        actorType: item.actorType.toLowerCase(),
-        adminId: item.adminUserId,
-        targetUserId: item.targetUserId,
-        username: item.targetUser?.username ?? null,
-        action: item.action,
-        previousStatus: item.previousStatus ? item.previousStatus.toLowerCase() : null,
-        newStatus: item.newStatus ? item.newStatus.toLowerCase() : null,
-        oldStatus:
-          item.action === 'user_status_changed' && item.previousStatus
-            ? item.previousStatus.toLowerCase()
-            : null,
-        statusChange:
-          item.action === 'user_status_changed'
-            ? {
-                oldStatus: item.previousStatus ? item.previousStatus.toLowerCase() : null,
-                newStatus: item.newStatus ? item.newStatus.toLowerCase() : null,
-              }
-            : null,
-        reason: item.reason,
-        meta: item.meta,
-        createdAt: item.createdAt.toISOString(),
-      })),
+      items: items.map((item) => {
+        const actorType = item.actorType.toLowerCase();
+        const adminUsername = item.adminUser?.username ?? null;
+        const actorUsername =
+          item.actorType === 'ADMIN'
+            ? adminUsername
+            : item.actorType === 'USER'
+              ? item.targetUser?.username ?? null
+              : null;
+
+        return {
+          id: item.id,
+          actorType,
+          adminId: item.adminUserId,
+          adminUsername,
+          actorUsername,
+          actorLabel: actorUsername ?? actorType,
+          targetUserId: item.targetUserId,
+          username: item.targetUser?.username ?? null,
+          action: item.action,
+          previousStatus: item.previousStatus ? item.previousStatus.toLowerCase() : null,
+          newStatus: item.newStatus ? item.newStatus.toLowerCase() : null,
+          oldStatus:
+            item.action === 'user_status_changed' && item.previousStatus
+              ? item.previousStatus.toLowerCase()
+              : null,
+          statusChange:
+            item.action === 'user_status_changed'
+              ? {
+                  oldStatus: item.previousStatus ? item.previousStatus.toLowerCase() : null,
+                  newStatus: item.newStatus ? item.newStatus.toLowerCase() : null,
+                }
+              : null,
+          reason: item.reason,
+          meta: item.meta,
+          createdAt: item.createdAt.toISOString(),
+        };
+      }),
       pagination: {
         limit: query.limit,
         offset: query.offset,

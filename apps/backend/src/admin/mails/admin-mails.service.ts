@@ -276,8 +276,6 @@ export class AdminMailsService {
       });
     });
 
-    await this.deleteSharedAttachmentObjects(mail.id);
-
     return {
       success: true,
       message: 'Mail recalled successfully',
@@ -544,6 +542,54 @@ export class AdminMailsService {
     );
   }
 
+  async downloadAttachment(mailId: string, attachmentId: string) {
+    const attachment = await this.prismaService.internalMailAttachment.findFirst({
+      where: {
+        id: attachmentId,
+        internalMailId: mailId,
+        internalMail: {
+          deletedAt: null,
+        },
+      },
+      select: {
+        name: true,
+        size: true,
+        type: true,
+        storageKey: true,
+      },
+    });
+
+    if (!attachment?.storageKey) {
+      throw new NotFoundException('Attachment not found or not downloadable');
+    }
+
+    let buffer: Buffer;
+    try {
+      buffer = await this.mailService.downloadStorageObjectByKey(attachment.storageKey);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        await this.prismaService.internalMailAttachment.updateMany({
+          where: {
+            id: attachmentId,
+            storageKey: attachment.storageKey,
+          },
+          data: {
+            storageKey: null,
+          },
+        });
+      }
+
+      throw error;
+    }
+
+    return {
+      buffer,
+      filename: attachment.name,
+      mimetype: attachment.type,
+      size: attachment.size,
+    };
+  }
+
   private toAdminMailRecord(mail: {
     id: string;
     senderId: string;
@@ -560,6 +606,7 @@ export class AdminMailsService {
     recalledAt: Date | null;
     deletedAt: Date | null;
     attachments: Array<{
+      id: string;
       name: string;
       size: number;
       type: string;
@@ -595,9 +642,14 @@ export class AdminMailsService {
       isHtml: mail.isHtml,
       template: mail.template,
       attachments: mail.attachments.map((attachment) => ({
+        id: attachment.id,
         name: attachment.name,
         size: attachment.size,
         type: attachment.type,
+        downloadUrl: attachment.storageKey
+          ? `/admin/mails/${mail.id}/attachments/${attachment.id}`
+          : null,
+        isDownloadable: Boolean(attachment.storageKey),
       })),
       sentAt: mail.createdAt.toISOString(),
       canRecall: mail.recalledAt === null && mail.deletedAt === null,

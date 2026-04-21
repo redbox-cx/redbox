@@ -117,6 +117,23 @@ export class MailService {
       });
   }
 
+  async downloadStorageObjectByKey(storageKey: string) {
+    try {
+      const response = await this.s3.send(new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: storageKey,
+      }));
+
+      return Buffer.from(await response.Body!.transformToByteArray());
+    } catch (error) {
+      if (this.isMissingStorageObjectError(error)) {
+        throw new NotFoundException('Stored mail object not found');
+      }
+
+      throw error;
+    }
+  }
+
   private async getUserMailStorageUsed(userId: string) {
     const [mailAggregation, attachmentAggregation] = await Promise.all([
       this.prisma.mail.aggregate({
@@ -404,11 +421,9 @@ export class MailService {
     const sharedAttachment = mail.internalMailDelivery?.internalMail.attachments[0];
 
     if (!attachment && sharedAttachment?.storageKey) {
-      const s3Response = await this.s3.send(new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: sharedAttachment.storageKey,
-      }));
-      const sharedAttachmentBuffer = Buffer.from(await s3Response.Body!.transformToByteArray());
+      const sharedAttachmentBuffer = await this.downloadStorageObjectByKey(
+        sharedAttachment.storageKey,
+      );
 
       return {
         buffer: sharedAttachmentBuffer,
@@ -437,11 +452,7 @@ export class MailService {
     );
 
     // get encrypted attachement
-    const s3Response = await this.s3.send(new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: attachment.storageKey,
-    }));
-    const encryptedAttBuffer = Buffer.from(await s3Response.Body!.transformToByteArray());
+    const encryptedAttBuffer = await this.downloadStorageObjectByKey(attachment.storageKey);
 
     // decrypt attachement
     const attDecipher = createDecipheriv('aes-256-cbc', mailKey, Buffer.from(mail.mailKeyIv, 'hex'));
@@ -795,5 +806,21 @@ export class MailService {
         },
       },
     });
+  }
+
+  private isMissingStorageObjectError(error: unknown) {
+    const s3Error = error as {
+      Code?: string;
+      name?: string;
+      $metadata?: {
+        httpStatusCode?: number;
+      };
+    };
+
+    return (
+      s3Error.Code === 'NoSuchKey' ||
+      s3Error.name === 'NoSuchKey' ||
+      s3Error.$metadata?.httpStatusCode === 404
+    );
   }
 }

@@ -6,11 +6,13 @@ import {
   Param,
   Post,
   Query,
+  Res,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
@@ -52,6 +54,24 @@ export class AdminMailsController {
       message: 'Mails fetched successfully',
       result: await this.adminMailsService.getMails(query),
     };
+  }
+
+  @Get('mails/:mailId/attachments/:attachmentId')
+  async downloadAttachment(
+    @Param('mailId') mailId: string,
+    @Param('attachmentId') attachmentId: string,
+    @Res() res: Response,
+  ) {
+    const file = await this.adminMailsService.downloadAttachment(mailId, attachmentId);
+    const safeFilename = file.filename.replace(/["\\\r\n]/g, '_');
+
+    res.set({
+      'Content-Type': file.mimetype,
+      'Content-Length': file.buffer.length,
+      'Content-Disposition': `attachment; filename="${safeFilename}"`,
+    });
+
+    res.send(file.buffer);
   }
 
   @Post('mails')
