@@ -8,6 +8,7 @@ import { About } from "../pages/About";
 import { Blog } from "../pages/Blog";
 import { Contact } from "../pages/Contact";
 import { SecureSpherePage } from "../pages/SecureSpherePage";
+import { MailPublicPage } from "../pages/MailPage_Public";
 import { DashBoard } from "../pages/Dashboard";
 import { Upload } from "../pages/Upload";
 import { Download } from "../pages/Download";
@@ -21,7 +22,7 @@ import { MailPage } from "../pages/MailPage";
 import { SecureSphere } from "../pages/SecureSphere";
 import { ProtectedRoute } from "./ProtectedRoute";
 
-const PUBLIC_PATHS = ["/", "/about", "/blog", "/contact", "/about/securesphere", "/login", "/register", "/recover"];
+const PUBLIC_PATHS = ["/", "/about", "/blog", "/contact", "/about/securesphere", "/about/mail", "/login", "/register", "/recover"];
 
 export function AppRoutes() {
     const { isAuthenticated, loading } = useAuth();
@@ -48,6 +49,7 @@ export function AppRoutes() {
                     <Route path="/blog" element={<Blog />} />
                     <Route path="/contact" element={<Contact />} />
                     <Route path="/about/securesphere" element={<SecureSpherePage />} />
+                    <Route path="/about/mail" element={<MailPublicPage />} />
                     <Route
                         path="/login"
                         element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}

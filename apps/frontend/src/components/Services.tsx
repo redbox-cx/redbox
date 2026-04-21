@@ -15,7 +15,7 @@ const servicesData = [
         title: "Email Service",
         icon: mailIcon,
         description: "Currently providing email routing via Cloudflare, with plans to transition to a fully self-hosted, private email solution in the near future.",
-        path: "#"
+        path: "/about/mail"
     },
     {
         title: "Redbox Toolset",

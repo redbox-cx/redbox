@@ -12,7 +12,7 @@ const menuItems = [
     path: "#",
     submenu: [
       { name: "SecureSphere", path: "/about/securesphere", icon: securesphereIcon },
-      { name: "Email", path: "#", icon: mailIcon },
+      { name: "Email", path: "/about/mail", icon: mailIcon },
       { name: "ToolSet", path: "#", icon: toolsetIcon },
     ],
   },
