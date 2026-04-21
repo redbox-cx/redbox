@@ -88,6 +88,13 @@ export function MailDetailPanel({
                                 <span className="mc-view-tooltip">Archive</span>
                             </button>
                         )}
+                        {folder === 'archive' && (
+                            <button className="mc-view-btn" disabled={!selected}
+                                onClick={() => selected && onMove(selected.id, 'inbox')}>
+                                <i className="bi bi-inbox" />
+                                <span className="mc-view-tooltip">Move to inbox</span>
+                            </button>
+                        )}
                         {folder !== 'spam' ? (
                             <button className="mc-view-btn" disabled={!selected}
                                 onClick={() => selected && onMove(selected.id, 'spam')}>
@@ -99,13 +106,6 @@ export function MailDetailPanel({
                                 onClick={() => selected && onMove(selected.id, 'inbox')}>
                                 <i className="bi bi-inbox" />
                                 <span className="mc-view-tooltip">Not spam</span>
-                            </button>
-                        )}
-                        {folder === 'archive' && (
-                            <button className="mc-view-btn" disabled={!selected}
-                                onClick={() => selected && onMove(selected.id, 'inbox')}>
-                                <i className="bi bi-inbox" />
-                                <span className="mc-view-tooltip">Move to inbox</span>
                             </button>
                         )}
                         {isBlocked ? (
