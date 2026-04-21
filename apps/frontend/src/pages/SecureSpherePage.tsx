@@ -44,7 +44,6 @@ export function SecureSpherePage() {
                         initial="hidden"
                         animate="show"
                         variants={{ show: { transition: { staggerChildren: 0.18 } } }}
-                        style={{ width: '550px', minWidth: '550px' }}
                     >
                         <motion.h1
                             className="hero-title"

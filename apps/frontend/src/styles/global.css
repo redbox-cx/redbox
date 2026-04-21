@@ -1002,20 +1002,26 @@ html.ss-dark .navbar {
     background-color: #0e0e14;
 }
 
-html.ss-dark .menu-container {
-    background-color: #1a1a22;
+html.ss-dark .menu-wrapper {
+    background-color: #0e0e14;
+    box-shadow: -10px 0 30px rgba(0,0,0,0.4);
 }
 
 html.ss-dark .menu-item a {
     color: rgba(255,255,255,0.75);
+    border-bottom-color: rgba(255,255,255,0.06);
 }
 
 html.ss-dark .menu-item a:hover {
     color: #fff;
 }
 
+html.ss-dark .menu-container {
+    background-color: transparent;
+}
+
 html.ss-dark .submenu {
-    background: #1a1a22;
+    background: #16161e;
     border-color: rgba(255,255,255,0.08);
 }
 
@@ -1037,6 +1043,11 @@ html.ss-dark .logo-text {
 }
 
 html.ss-dark .login-btn {
+    background-color: var(--color-primary);
+    color: #fff;
+}
+
+html.ss-dark .mobile-login-btn {
     background-color: var(--color-primary);
     color: #fff;
 }
@@ -1096,10 +1107,16 @@ html.ss-dark .social-links a:hover i {
     color: var(--color-primary);
 }
 
+/* Hero layout override for SS page */
+html.ss-dark .hero-section {
+    justify-content: space-between;
+    gap: 40px;
+}
+
 /* Hero logo */
 .ss-hero-logo {
     width: 160px;
-    height: 160px;
+    height: auto;
     animation: levitate 5s ease-in-out infinite;
 }
 
@@ -1151,6 +1168,7 @@ html.ss-dark .social-links a:hover i {
     max-width: 1100px;
     margin: 0 auto;
     padding: 60px 40px 20px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 100px;
@@ -1256,6 +1274,97 @@ html.ss-dark .social-links a:hover i {
     color: rgba(255,255,255,0.3);
     line-height: 1.6;
     margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    html.ss-dark .hero-text {
+        width: 100% !important;
+        min-width: 0 !important;
+        text-align: center;
+    }
+
+    html.ss-dark .hero-title {
+        font-size: 3rem;
+        letter-spacing: -2px;
+    }
+
+    html.ss-dark .ss-cta-row {
+        justify-content: center;
+    }
+
+    .ss-hero-logo {
+        width: 120px;
+    }
+
+    .ss-detail-container {
+        padding: 40px 20px 20px;
+        gap: 60px;
+    }
+
+    .ss-detail-row,
+    .ss-detail-row.reverse {
+        flex-direction: column;
+        gap: 32px;
+        text-align: center;
+    }
+
+    .ss-detail-title {
+        font-size: 1.35rem;
+    }
+
+    .ss-detail-visual {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+    }
+
+    .ss-detail-visual .tilted-card-figure,
+    .ss-detail-visual .tilted-card-inner {
+        width: 100% !important;
+        height: auto !important;
+        perspective: none !important;
+        transform: none !important;
+    }
+
+    .ss-detail-visual .tilted-card-img {
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        border-radius: 15px;
+        opacity: 0.75;
+    }
+}
+
+@media (max-width: 600px) {
+    html.ss-dark .hero-title {
+        font-size: 2.4rem;
+        letter-spacing: -1px;
+    }
+
+    .ss-detail-container {
+        padding: 32px 16px 16px;
+        gap: 48px;
+    }
+
+    .ss-detail-title {
+        font-size: 1.2rem;
+    }
+
+    .ss-cta-row {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+}
+
+@media (max-width: 340px) {
+    html.ss-dark .hero-title {
+        font-size: 1.9rem;
+        letter-spacing: 0;
+    }
 }
 
 /*#endregion*/
@@ -1381,6 +1490,30 @@ html.ss-dark .social-links a:hover i {
     .about-image {
         aspect-ratio: 16 / 9;
         max-width: 100%;
+    }
+
+    .about-visual {
+        width: 100%;
+        flex: none;
+        display: flex;
+        justify-content: center;
+    }
+
+    .about-visual .tilted-card-figure,
+    .about-visual .tilted-card-inner {
+        width: 100% !important;
+        height: auto !important;
+        perspective: none !important;
+        transform: none !important;
+    }
+
+    .about-visual .tilted-card-img {
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        border-radius: 15px;
     }
 
     .highlight-text {
@@ -6465,6 +6598,7 @@ html.dash-page {
 .mc-detail-sender-email {
     font-size: 0.78rem;
     color: var(--color-text-muted);
+    word-break: break-all;
 }
 
 .mc-blocked-badge {
