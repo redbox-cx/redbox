@@ -1,5 +1,5 @@
 import { Injectable, Logger, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { UserStatus } from '@prisma/client';
+import { InternalMailTargetType, UserStatus } from '@prisma/client';
 import { PrismaService } from 'src/prisma.service';
 import { simpleParser } from 'mailparser';
 import { IncomingMailDto } from './dto/incoming-mail.dto';
@@ -135,20 +135,38 @@ export class MailService {
   }
 
   private async getUserMailStorageUsed(userId: string) {
-    const [mailAggregation, attachmentAggregation] = await Promise.all([
-      this.prisma.mail.aggregate({
-        where: { userId },
-        _sum: { contentSize: true },
-      }),
-      this.prisma.mailAttachment.aggregate({
-        where: { mail: { userId } },
-        _sum: { size: true },
-      }),
-    ]);
+    const [mailAggregation, attachmentAggregation, directInternalAttachmentAggregation] =
+      await Promise.all([
+        this.prisma.mail.aggregate({
+          where: { userId },
+          _sum: { contentSize: true },
+        }),
+        this.prisma.mailAttachment.aggregate({
+          where: { mail: { userId } },
+          _sum: { size: true },
+        }),
+        this.prisma.internalMailAttachment.aggregate({
+          where: {
+            storageKey: { not: null },
+            internalMail: {
+              targetType: InternalMailTargetType.USER,
+              deliveries: {
+                some: {
+                  userId,
+                  mailId: { not: null },
+                  recalledAt: null,
+                },
+              },
+            },
+          },
+          _sum: { size: true },
+        }),
+      ]);
 
     return (
       Number(mailAggregation._sum.contentSize ?? 0) +
-      Number(attachmentAggregation._sum.size ?? 0)
+      Number(attachmentAggregation._sum.size ?? 0) +
+      Number(directInternalAttachmentAggregation._sum.size ?? 0)
     );
   }
 
