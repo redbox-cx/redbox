@@ -147,11 +147,11 @@ export function MailDetailPanel({
                                                 {s.name !== s.email && <span className="mc-detail-sender-name">{s.name}</span>}
                                                 <span className="mc-detail-sender-email">{s.email}</span>
                                                 {isBlocked && <span className="mc-blocked-badge"><i className="bi bi-slash-circle" /> Blocked</span>}
+                                                <span className="mc-detail-ts">{formatFull(selected.createdAt)}</span>
                                             </>
                                         );
                                     })()}
                                 </div>
-                                <span className="mc-detail-ts">{formatFull(selected.createdAt)}</span>
                             </div>
                         </div>
 
