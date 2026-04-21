@@ -21,6 +21,7 @@ import { Settings } from "../pages/Settings";
 import { MailPage } from "../pages/MailPage";
 import { SecureSphere } from "../pages/SecureSphere";
 import { ProtectedRoute } from "./ProtectedRoute";
+import { SystemNotificationToast } from "../components/notifications/SystemNotificationToast";
 
 const PUBLIC_PATHS = ["/", "/about", "/blog", "/contact", "/about/securesphere", "/about/mail", "/login", "/register", "/recover"];
 
@@ -34,6 +35,8 @@ export function AppRoutes() {
     const transitionKey = isPublic ? location.pathname : "app";
 
     return (
+        <>
+        {isAuthenticated && <SystemNotificationToast />}
         <AnimatePresence mode="wait" initial={false}>
             <motion.div
                 key={transitionKey}
@@ -75,5 +78,6 @@ export function AppRoutes() {
                 </Routes>
             </motion.div>
         </AnimatePresence>
+        </>
     );
 }
