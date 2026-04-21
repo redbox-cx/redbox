@@ -11,6 +11,7 @@ import { BinsModule } from './bins/bins.module';
 import { MailModule } from './mail/mail.module';
 import { ReportsModule } from './reports/reports.module';
 import { BlogModule } from './blog/blog.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { BlogModule } from './blog/blog.module';
     MailModule,
     ReportsModule,
     BlogModule,
+    NotificationsModule,
   ],
   controllers: [],
   providers: [],

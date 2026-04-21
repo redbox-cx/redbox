@@ -65,6 +65,14 @@ enum BlogPostStatus {
   WITHDRAWN
 }
 
+enum SystemNotificationCategory {
+  INFO
+  WARNING
+  ERROR
+  SUCCESS
+  MAINTENANCE
+}
+
 model User {
   id          String     @id @default(uuid())
   username    String     @unique @db.VarChar(50)
@@ -115,15 +123,25 @@ model AdminUser {
   recalledInternalMails  InternalMail[]  @relation("InternalMailRecalledBy")
   deletedInternalMails   InternalMail[]  @relation("InternalMailDeletedBy")
   blogPosts              BlogPost[]      @relation("BlogPostAuthor")
+  createdInviteCodes     InviteCode[]    @relation("InviteCodeCreatedByAdmin")
+  createdSystemNotifications SystemNotification[] @relation("SystemNotificationCreatedBy")
 }
 
 model InviteCode {
-  id      String  @id @default(uuid())
-  code    String  @unique @db.VarChar(50)
-  usage   Int     @default(1)
-  isValid Boolean @default(true)
-  userId  String?
-  creator User?   @relation("GeneratedBy", fields: [userId], references: [id])
+  id                   String     @id @default(uuid())
+  code                 String     @unique @db.VarChar(50)
+  usage                Int        @default(1)
+  isValid              Boolean    @default(true)
+  userId               String?
+  creator              User?      @relation("GeneratedBy", fields: [userId], references: [id])
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser? @relation("InviteCodeCreatedByAdmin", fields: [createdByAdminUserId], references: [id], onDelete: SetNull)
+  isAdminCreated       Boolean    @default(false)
+  createdAt            DateTime   @default(now())
+
+  @@index([createdByAdminUserId])
+  @@index([isAdminCreated])
+  @@index([createdAt])
 }
 
 model File {
@@ -429,4 +447,19 @@ model BlogPost {
   @@index([status, publishedAt])
   @@index([createdAt])
   @@index([authorAdminUserId])
+}
+
+model SystemNotification {
+  id                   String                     @id @default(uuid())
+  category             SystemNotificationCategory
+  message              String                     @db.VarChar(1000)
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser?                 @relation("SystemNotificationCreatedBy", fields: [createdByAdminUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                   @default(now())
+  expiresAt            DateTime
+
+  @@index([category])
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@index([createdByAdminUserId])
 }

@@ -42,7 +42,7 @@ export class MailEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly subscriber: Redis;
 
   constructor(@InjectRedis() private readonly redis: Redis) {
-    this.subscriber = this.redis.duplicate();
+    this.subscriber = this.redis.duplicate({ enableReadyCheck: false });
   }
 
   async onModuleInit() {
