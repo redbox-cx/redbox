@@ -51,8 +51,10 @@ export default function TiltedCard({
 
   const [lastY, setLastY] = useState(0);
 
+  const isMobile = () => window.matchMedia('(max-width: 1024px)').matches;
+
   function handleMouse(e: React.MouseEvent) {
-    if (!ref.current) return;
+    if (!ref.current || isMobile()) return;
     const rect = ref.current.getBoundingClientRect();
     const offsetX = e.clientX - rect.left - rect.width / 2;
     const offsetY = e.clientY - rect.top - rect.height / 2;
@@ -65,6 +67,7 @@ export default function TiltedCard({
   }
 
   function handleMouseEnter() {
+    if (isMobile()) return;
     scale.set(scaleOnHover);
     opacity.set(1);
   }
