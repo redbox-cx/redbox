@@ -206,4 +206,4 @@ Die Phase Konzept verlief planmässig. Die grösste Herausforderung war die Konz
 | 24.04  | Tests durchführen (T1–T11), Bugfixing, Dokumentation abschliessen                          | Ganzes Team     | Offen    |
 | 25.04  | Abschlusspräsentation vorbereiten, finales Deployment                                      | Noel Kohn       | Offen    |
 
-Die Realisierungsphase dauert vier Tage (20.–22. + 24. April 2026). Ziel ist es, eine vollständig funktionsfähige Plattform bereitzustellen, auf der sich Nutzerinnen und Nutzer registrieren, E-Mails empfangen, Dateien Ende-zu-Ende-verschlüsselt hochladen und Texte im Bin speichern können.
+Die Realisierungsphase dauert drei Tage (20.–22. April 2026). Ziel ist es, eine vollständig funktionsfähige Plattform bereitzustellen, auf der sich Nutzerinnen und Nutzer registrieren, E-Mails empfangen, Dateien Ende-zu-Ende-verschlüsselt hochladen und Texte im Bin speichern können.
