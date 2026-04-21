@@ -10,11 +10,29 @@ export interface SystemNotification {
     expiresAt: string;
 }
 
+const STORAGE_KEY = 'dismissed_notifications';
+
+function getDismissed(): Set<string> {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function saveDismissed(ids: Set<string>) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+}
+
 export function useSystemNotifications() {
     const { isAuthenticated } = useAuth();
     const [notifications, setNotifications] = useState<SystemNotification[]>([]);
 
     const dismiss = useCallback((id: string) => {
+        const dismissed = getDismissed();
+        dismissed.add(id);
+        saveDismissed(dismissed);
         setNotifications(prev => prev.filter(n => n.id !== id));
     }, []);
 
@@ -29,9 +47,10 @@ export function useSystemNotifications() {
 
         es.addEventListener('notification.snapshot', (e: MessageEvent) => {
             const data = JSON.parse(e.data);
+            const dismissed = getDismissed();
             const now = new Date();
             const active = (data.notifications as SystemNotification[]).filter(
-                n => new Date(n.expiresAt) > now
+                n => new Date(n.expiresAt) > now && !dismissed.has(n.id)
             );
             setNotifications(active);
         });
@@ -39,7 +58,8 @@ export function useSystemNotifications() {
         es.addEventListener('notification.created', (e: MessageEvent) => {
             const data = JSON.parse(e.data);
             const n: SystemNotification = data.notification;
-            if (new Date(n.expiresAt) > new Date()) {
+            const dismissed = getDismissed();
+            if (new Date(n.expiresAt) > new Date() && !dismissed.has(n.id)) {
                 setNotifications(prev => [n, ...prev]);
             }
         });
