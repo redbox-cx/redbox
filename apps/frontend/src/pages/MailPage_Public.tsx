@@ -89,16 +89,21 @@ export function MailPublicPage() {
                             <p>It's already available inside your Redbox dashboard if you have an account. No extra setup, just open it and it works.</p>
                         </div>
                         <div className="mail-pub-visual">
-                            <TiltedCard
-                                imageSrc={mailPreview}
-                                altText="Mail preview"
-                                containerWidth="100%"
-                                containerHeight="320px"
-                                imageWidth="100%"
-                                imageHeight="320px"
-                                showMobileWarning={false}
-                                showTooltip={false}
-                            />
+                            <div className="mail-pub-card-wrapper">
+                                <TiltedCard
+                                    imageSrc={mailPreview}
+                                    altText="Mail preview"
+                                    containerWidth="100%"
+                                    containerHeight="100%"
+                                    imageWidth="100%"
+                                    scaleOnHover={1.05}
+                                    rotateAmplitude={6}
+                                    imageHeight="100%"
+                                    showMobileWarning={false}
+                                    showTooltip={false}
+                                />
+                            </div>
+                            <img src={mailPreview} alt="Mail preview" className="mail-pub-preview-img" />
                         </div>
                     </section>
                 </div>

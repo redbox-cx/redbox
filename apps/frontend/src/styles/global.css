@@ -1608,24 +1608,33 @@ html.ss-dark .hero-section {
 }
 
 .mail-pub-visual {
-    flex: 1.2;
+    flex: 1.4;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.mail-pub-preview-img {
+.mail-pub-card-wrapper {
     width: 100%;
-    height: auto;
-    display: block;
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+    aspect-ratio: 3071 / 1506;
 }
 
-.mail-pub-visual .tilted-card-img {
-    object-fit: contain !important;
-    border-radius: 12px;
+.mail-pub-card-wrapper .tilted-card-figure,
+.mail-pub-card-wrapper .tilted-card-inner,
+.mail-pub-card-wrapper .tilted-card-img {
+    width: 100% !important;
+    height: 100% !important;
 }
+
+.mail-pub-card-wrapper .tilted-card-img {
+    object-fit: cover;
+    border-radius: 16px !important;
+}
+
+.mail-pub-preview-img {
+    display: none;
+}
+
 
 @media (max-width: 900px) {
     .mail-pub-hero-logo { width: 120px; }
@@ -1641,22 +1650,21 @@ html.ss-dark .hero-section {
     .mail-pub-visual {
         width: 100%;
         flex: none;
+        justify-content: center;
     }
 
-    .mail-pub-visual .tilted-card-figure,
-    .mail-pub-visual .tilted-card-inner {
-        width: 100% !important;
-        height: auto !important;
-        perspective: none !important;
-        transform: none !important;
+    .mail-pub-card-wrapper {
+        display: none;
     }
 
-    .mail-pub-visual .tilted-card-img {
-        position: static !important;
-        width: 100% !important;
-        height: auto !important;
-        object-fit: contain !important;
+    .mail-pub-preview-img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 16px;
+        margin: 0 auto;
     }
+
 
     .mail-pub-cta-row {
         justify-content: center;
