@@ -1,11 +1,15 @@
-import { Controller, Post, Get, Body, Req, Res, UnauthorizedException, UseGuards, UseInterceptors, Query, Param, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, Res, UnauthorizedException, UseGuards, UseInterceptors, Query, Param, Patch, Delete, Sse } from '@nestjs/common';
+import type { MessageEvent } from '@nestjs/common';
 import { MailService } from './mail.service';
+import { MailEventsService } from './mail-events.service';
 import { IncomingMailDto } from './dto/incoming-mail.dto';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { TransformInterceptor } from 'src/common/interceptors/transform.interceptor';
 import { timingSafeEqual } from 'crypto';
+import { Observable } from 'rxjs';
+import { MailSseAuthGuard } from './guard/mail-sse-auth.guard';
 import {
   BulkMailDto,
   MarkReadDto,
@@ -19,7 +23,10 @@ import {
 @Controller('mail')
 @UseInterceptors(TransformInterceptor)
 export class MailController {
-  constructor(private readonly mailService: MailService) {}
+  constructor(
+    private readonly mailService: MailService,
+    private readonly mailEventsService: MailEventsService,
+  ) {}
 
 
   @Get()
@@ -56,6 +63,12 @@ export class MailController {
   async listBlockedSenders(@GetUserId() userId: string) {
     const result = await this.mailService.getBlockedSenders(userId);
     return { message: 'Blocked senders fetched successfully', result };
+  }
+
+  @Sse('events')
+  @UseGuards(MailSseAuthGuard)
+  streamMailEvents(@GetUserId() userId: string): Observable<MessageEvent> {
+    return this.mailEventsService.streamForUser(userId);
   }
 
   @Get(':id')

@@ -16,6 +16,16 @@ type InternalMailRecipientUser = {
   publicKey: string;
 };
 
+type StoredInternalMailAttachment = {
+  name: string;
+  size: number;
+  type: string;
+  storageKey: string;
+};
+
+const MAX_INTERNAL_MAIL_ATTACHMENTS = 10;
+const MAX_INTERNAL_MAIL_ATTACHMENT_SIZE = 35 * 1024 * 1024;
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -90,7 +100,11 @@ export class AdminMailsService {
     };
   }
 
-  async sendMail(adminUserId: string, dto: SendAdminMailDto) {
+  async sendMail(
+    adminUserId: string,
+    dto: SendAdminMailDto,
+    uploadedAttachments: Express.Multer.File[] = [],
+  ) {
     const sender = this.findSenderOrThrow(dto.senderId);
     const target = this.resolveTargetAddress(dto);
     const recipientUsers = await this.resolveRecipientUsers(target);
@@ -99,85 +113,120 @@ export class AdminMailsService {
       throw new BadRequestException('No recipients available for this internal mail');
     }
 
-    const internalMail = await this.prismaService.internalMail.create({
-      data: {
-        createdByAdminUserId: adminUserId,
-        senderId: sender.id,
-        senderAddress: sender.address,
-        senderLabel: sender.label,
-        toAddress: target.toAddress,
-        targetType: target.targetType,
-        targetUsername: target.targetUsername,
-        subject: dto.subject,
-        body: dto.body,
-        isHtml: dto.isHtml,
-        template: dto.template ?? null,
-        attachments: {
-          create: dto.attachments.map((attachment) => ({
-            name: attachment.name,
-            size: attachment.size,
-            type: attachment.type,
-          })),
-        },
-      },
-      include: {
-        attachments: true,
-        deliveries: true,
-      },
-    });
-
+    const storedUploadedAttachments =
+      await this.storeUploadedAttachments(uploadedAttachments);
     const deliveredMailIds: string[] = [];
+    let internalMailId: string | null = null;
+
+    const metadataAttachments = dto.attachments ?? [];
+    const attachmentCreateData = [
+      ...metadataAttachments.map((attachment) => ({
+        name: attachment.name,
+        size: attachment.size,
+        type: attachment.type,
+      })),
+      ...storedUploadedAttachments.map((attachment) => ({
+        name: attachment.name,
+        size: attachment.size,
+        type: attachment.type,
+        storageKey: attachment.storageKey,
+      })),
+    ];
 
     try {
-      for (const user of recipientUsers) {
-        const inboxMail = await this.mailService.createInternalInboxMail(user, {
-          from: this.buildSenderHeader(sender),
+      const internalMail = await this.prismaService.internalMail.create({
+        data: {
+          createdByAdminUserId: adminUserId,
+          senderId: sender.id,
+          senderAddress: sender.address,
+          senderLabel: sender.label,
+          toAddress: target.toAddress,
+          targetType: target.targetType,
+          targetUsername: target.targetUsername,
           subject: dto.subject,
           body: dto.body,
-        });
-
-        deliveredMailIds.push(inboxMail.mailId);
-
-        await this.prismaService.internalMailDelivery.create({
-          data: {
-            internalMailId: internalMail.id,
-            userId: user.id,
-            mailId: inboxMail.mailId,
+          isHtml: dto.isHtml,
+          template: dto.template ?? null,
+          attachments: {
+            create: attachmentCreateData,
           },
-        });
+        },
+        include: {
+          attachments: true,
+          deliveries: true,
+        },
+      });
+      internalMailId = internalMail.id;
+
+      try {
+        for (const user of recipientUsers) {
+          const inboxMail = await this.mailService.createInternalInboxMail(user, {
+            from: this.buildSenderHeader(sender),
+            subject: dto.subject,
+            body: dto.body,
+          });
+
+          deliveredMailIds.push(inboxMail.mailId);
+
+          await this.prismaService.internalMailDelivery.create({
+            data: {
+              internalMailId: internalMail.id,
+              userId: user.id,
+              mailId: inboxMail.mailId,
+            },
+          });
+        }
+      } catch (error) {
+        for (const mailId of deliveredMailIds) {
+          await this.mailService.deleteMailRecordById(mailId, { throwIfMissing: false });
+        }
+
+        await this.prismaService.internalMail
+          .delete({ where: { id: internalMail.id } })
+          .catch(() => undefined);
+
+        throw error;
       }
+
+      await this.createAuditLog(this.prismaService, {
+        adminUserId,
+        action: 'internal_mail_sent',
+        reason: `Internal mail sent to ${target.toAddress}`,
+        meta: {
+          internalMailId: internalMail.id,
+          toAddress: target.toAddress,
+          targetType: target.targetType.toLowerCase(),
+          recipientCount: recipientUsers.length,
+          attachmentCount: attachmentCreateData.length,
+          sharedAttachmentCount: storedUploadedAttachments.length,
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Mail sent successfully',
+        mailId: internalMail.id,
+        toAddress: target.toAddress,
+        recipientCount: recipientUsers.length,
+        attachmentCount: attachmentCreateData.length,
+        sharedAttachmentCount: storedUploadedAttachments.length,
+        isBroadcast: target.targetType === InternalMailTargetType.BROADCAST,
+      };
     } catch (error) {
       for (const mailId of deliveredMailIds) {
         await this.mailService.deleteMailRecordById(mailId, { throwIfMissing: false });
       }
 
-      await this.prismaService.internalMail
-        .delete({ where: { id: internalMail.id } })
-        .catch(() => undefined);
+      await this.deleteStoredAttachments(storedUploadedAttachments);
+
+      if (internalMailId) {
+        await this.prismaService.internalMail
+          .delete({ where: { id: internalMailId } })
+          .catch(() => undefined);
+      }
 
       throw error;
     }
-
-    await this.createAuditLog(this.prismaService, {
-      adminUserId,
-      action: 'internal_mail_sent',
-      reason: `Internal mail sent to ${target.toAddress}`,
-      meta: {
-        internalMailId: internalMail.id,
-        toAddress: target.toAddress,
-        targetType: target.targetType.toLowerCase(),
-        recipientCount: recipientUsers.length,
-      },
-    });
-
-    return {
-      success: true,
-      message: 'Mail sent successfully',
-      mailId: internalMail.id,
-      toAddress: target.toAddress,
-      recipientCount: recipientUsers.length,
-      isBroadcast: target.targetType === InternalMailTargetType.BROADCAST,
-    };
   }
 
   async recallMail(adminUserId: string, mailId: string, dto: RecallAdminMailDto) {
@@ -226,6 +275,8 @@ export class AdminMailsService {
         },
       });
     });
+
+    await this.deleteSharedAttachmentObjects(mail.id);
 
     return {
       success: true,
@@ -291,6 +342,8 @@ export class AdminMailsService {
       });
     });
 
+    await this.deleteSharedAttachmentObjects(mail.id);
+
     return {
       success: true,
       message: 'Mail deleted/recalled successfully',
@@ -310,7 +363,7 @@ export class AdminMailsService {
 
   private resolveTargetAddress(dto: SendAdminMailDto) {
     const normalizedTo = dto.to?.trim().toLowerCase();
-    const normalizedRecipients = dto.recipients
+    const normalizedRecipients = (dto.recipients ?? [])
       .map((recipient) => recipient.trim().toLowerCase())
       .filter(Boolean);
 
@@ -425,11 +478,70 @@ export class AdminMailsService {
 
       await this.mailService.deleteMailRecordById(delivery.mailId, {
         throwIfMissing: false,
+        eventType: 'mail.recalled',
+        reason: 'Internal mail recalled by admin',
       });
       recalledCount += 1;
     }
 
     return recalledCount;
+  }
+
+  private async storeUploadedAttachments(
+    uploadedAttachments: Express.Multer.File[],
+  ): Promise<StoredInternalMailAttachment[]> {
+    if (uploadedAttachments.length > MAX_INTERNAL_MAIL_ATTACHMENTS) {
+      throw new BadRequestException(
+        `Internal mail can't have more than ${MAX_INTERNAL_MAIL_ATTACHMENTS} attachments`,
+      );
+    }
+
+    const storedAttachments: StoredInternalMailAttachment[] = [];
+
+    try {
+      for (const attachment of uploadedAttachments) {
+        if (attachment.size > MAX_INTERNAL_MAIL_ATTACHMENT_SIZE) {
+          throw new BadRequestException("Attachment can't be larger than 35MB");
+        }
+
+        storedAttachments.push(
+          await this.mailService.storeSharedInternalAttachment(attachment),
+        );
+      }
+
+      return storedAttachments;
+    } catch (error) {
+      await this.deleteStoredAttachments(storedAttachments);
+      throw error;
+    }
+  }
+
+  private async deleteStoredAttachments(attachments: StoredInternalMailAttachment[]) {
+    await Promise.all(
+      attachments.map((attachment) =>
+        this.mailService.deleteStorageObjectByKey(attachment.storageKey),
+      ),
+    );
+  }
+
+  private async deleteSharedAttachmentObjects(internalMailId: string) {
+    const attachments = await this.prismaService.internalMailAttachment.findMany({
+      where: {
+        internalMailId,
+        storageKey: { not: null },
+      },
+      select: {
+        storageKey: true,
+      },
+    });
+
+    await Promise.all(
+      attachments.map((attachment) =>
+        attachment.storageKey
+          ? this.mailService.deleteStorageObjectByKey(attachment.storageKey)
+          : Promise.resolve(),
+      ),
+    );
   }
 
   private toAdminMailRecord(mail: {
@@ -451,6 +563,7 @@ export class AdminMailsService {
       name: string;
       size: number;
       type: string;
+      storageKey?: string | null;
     }>;
     deliveries: Array<{
       mailId: string | null;

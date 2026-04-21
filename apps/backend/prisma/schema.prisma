@@ -396,6 +396,7 @@ model InternalMailAttachment {
   name           String       @db.VarChar(255)
   size           Int
   type           String       @db.VarChar(100)
+  storageKey     String?      @unique
   createdAt      DateTime     @default(now())
 
   @@index([internalMailId])

@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -42,6 +43,7 @@ export class AdminMailAttachmentDto {
   @Type(() => Number)
   @IsInt({ message: 'Attachment size must be an integer' })
   @Min(0, { message: "Attachment size can't be negative" })
+  @Max(35 * 1024 * 1024, { message: "Attachment size can't be larger than 35MB" })
   size: number;
 
   @IsString()
@@ -64,12 +66,15 @@ export class SendAdminMailDto {
   to?: string;
 
   // Legacy fields kept for compatibility with the current admin panel payload.
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? [value] : value))
   @IsArray()
   @ArrayUnique()
   @IsEmail({}, { each: true, message: 'Each recipient must be a valid email address' })
   recipients: string[] = [];
 
   @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
   isBroadcast?: boolean;
 
@@ -83,6 +88,7 @@ export class SendAdminMailDto {
   @MaxLength(100000, { message: "Body can't be longer than 100000 characters" })
   body: string;
 
+  @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
   isHtml: boolean;
 

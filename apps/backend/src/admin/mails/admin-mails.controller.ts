@@ -1,8 +1,29 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
 import { AdminMailsQueryDto, RecallAdminMailDto, SendAdminMailDto } from '../dto/mails.dto';
 import { AdminMailsService } from './admin-mails.service';
+
+const adminMailAttachmentUploadConfig = {
+  storage: memoryStorage(),
+  limits: {
+    files: 10,
+    fileSize: 35 * 1024 * 1024,
+  },
+};
 
 @Controller('admin')
 @UseGuards(AdminJwtAuthGuard)
@@ -34,8 +55,13 @@ export class AdminMailsController {
   }
 
   @Post('mails')
-  async sendMail(@GetUserId() adminUserId: string, @Body() dto: SendAdminMailDto) {
-    const result = await this.adminMailsService.sendMail(adminUserId, dto);
+  @UseInterceptors(FilesInterceptor('attachments', 10, adminMailAttachmentUploadConfig))
+  async sendMail(
+    @GetUserId() adminUserId: string,
+    @Body() dto: SendAdminMailDto,
+    @UploadedFiles() attachments: Express.Multer.File[] = [],
+  ) {
+    const result = await this.adminMailsService.sendMail(adminUserId, dto, attachments);
     return {
       message: result.message,
       result,

@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { publicEncrypt, privateDecrypt, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
+import { MailEventsService, type MailPushEventType } from './mail-events.service';
 
 
 type MailboxUser = {
@@ -32,6 +33,13 @@ type StoredMailboxMailInput = {
   attachments?: MailboxAttachmentInput[];
 };
 
+type SharedInternalAttachmentInput = {
+  buffer: Buffer;
+  originalname: string;
+  mimetype: string;
+  size: number;
+};
+
 @Injectable()
 export class MailService {
 
@@ -42,7 +50,8 @@ export class MailService {
 
   constructor(
     private prisma: PrismaService,
-    @InjectRedis() private readonly redis: Redis
+    @InjectRedis() private readonly redis: Redis,
+    private readonly mailEventsService: MailEventsService,
   ){
     this.s3 = new S3Client({
       endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
@@ -71,9 +80,41 @@ export class MailService {
       attachments: [],
     });
 
+    void this.mailEventsService.emitToUser(user.id, {
+      type: 'mail.created',
+      mailId: mail.id,
+      source: 'internal',
+    });
+
     return {
       mailId: mail.id,
     };
+  }
+
+  async storeSharedInternalAttachment(attachment: SharedInternalAttachmentInput) {
+    const storageKey = `internal_mail_att_${uuidv4()}.bin`;
+
+    await this.s3.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: storageKey,
+      Body: attachment.buffer,
+      ContentType: attachment.mimetype || 'application/octet-stream',
+    }));
+
+    return {
+      name: attachment.originalname || 'attachment',
+      size: attachment.size,
+      type: attachment.mimetype || 'application/octet-stream',
+      storageKey,
+    };
+  }
+
+  async deleteStorageObjectByKey(storageKey: string) {
+    await this.s3
+      .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: storageKey }))
+      .catch((error) => {
+        this.logger.error(`Failed to delete S3 object ${storageKey}`, error);
+      });
   }
 
   private async getUserMailStorageUsed(userId: string) {
@@ -96,7 +137,11 @@ export class MailService {
 
   async deleteMailRecordById(
     mailId: string,
-    options: { throwIfMissing?: boolean } = {},
+    options: {
+      throwIfMissing?: boolean;
+      eventType?: Extract<MailPushEventType, 'mail.deleted' | 'mail.recalled'>;
+      reason?: string;
+    } = {},
   ) {
     const throwIfMissing = options.throwIfMissing ?? true;
     const mail = await this.prisma.mail.findUnique({
@@ -128,6 +173,13 @@ export class MailService {
     );
 
     await this.prisma.mail.delete({ where: { id: mailId } });
+
+    void this.mailEventsService.emitToUser(mail.userId, {
+      type: options.eventType ?? 'mail.deleted',
+      mailId,
+      source: options.eventType === 'mail.recalled' ? 'admin' : 'user',
+      reason: options.reason,
+    });
 
     return {
       success: true,
@@ -189,6 +241,18 @@ export class MailService {
             isArchived: true,
             isSpam: true,
             createdAt: true,
+            internalMailDelivery: {
+              select: {
+                internalMail: {
+                  select: {
+                    attachments: {
+                      where: { storageKey: { not: null } },
+                      select: { id: true },
+                    },
+                  },
+                },
+              },
+            },
             _count: {
               select: { attachments: true}
             }
@@ -199,11 +263,15 @@ export class MailService {
       ]);
 
       const mails = rawMails.map(mail => {
-        const { _count, ...rest } = mail;
+        const { _count, internalMailDelivery, ...rest } = mail;
+        const sharedAttachmentCount =
+          internalMailDelivery?.internalMail.attachments.length ?? 0;
+        const attachmentCount = _count.attachments + sharedAttachmentCount;
+
         return {
           ...rest,
-          attachmentCount: _count.attachments,
-          hasAttachments: _count.attachments > 0       // true / false
+          attachmentCount,
+          hasAttachments: attachmentCount > 0       // true / false
         };
       });
       
@@ -224,7 +292,20 @@ export class MailService {
   async getSingleMail(userId: string, mailId: string) {
     const mail = await this.prisma.mail.findUnique({ 
       where: { id: mailId },
-      include: { attachments: true }
+      include: {
+        attachments: true,
+        internalMailDelivery: {
+          include: {
+            internalMail: {
+              include: {
+                attachments: {
+                  where: { storageKey: { not: null } },
+                },
+              },
+            },
+          },
+        },
+      },
     });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     
@@ -258,6 +339,12 @@ export class MailService {
 
     if (!mail.isRead) {
       await this.prisma.mail.update({ where: { id: mailId }, data: { isRead: true } });
+      void this.mailEventsService.emitToUser(userId, {
+        type: 'mail.updated',
+        mailId,
+        isRead: true,
+        source: 'user',
+      });
     }
 
     const formattedAttachments = mail.attachments.map(att => ({
@@ -266,13 +353,21 @@ export class MailService {
       mimetype: att.mimetype,
       size: att.size
     }));
+    const formattedSharedAttachments =
+      mail.internalMailDelivery?.internalMail.attachments.map(att => ({
+        id: att.id,
+        filename: att.name,
+        mimetype: att.type,
+        size: att.size,
+        isSharedInternal: true,
+      })) ?? [];
 
-    const { storageKey, encryptedMailKey, mailKeyIv, attachments, ...safeMailData } = mail;
+    const { storageKey, encryptedMailKey, mailKeyIv, attachments, internalMailDelivery, ...safeMailData } = mail;
 
     return { 
       ...safeMailData, 
       content: decryptedContent.toString('utf8'),
-      attachments: formattedAttachments
+      attachments: [...formattedAttachments, ...formattedSharedAttachments]
     };
   }
 
@@ -282,14 +377,50 @@ export class MailService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const mail = await this.prisma.mail.findUnique({
       where: { id: mailId },
-      include: { attachments: { where: { id: attachmentId } } }
+      include: {
+        attachments: { where: { id: attachmentId } },
+        internalMailDelivery: {
+          include: {
+            internalMail: {
+              include: {
+                attachments: {
+                  where: {
+                    id: attachmentId,
+                    storageKey: { not: null },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
-    if (!user || !mail || mail.userId !== userId || mail.attachments.length === 0) {
+    if (!user || !mail || mail.userId !== userId) {
       throw new NotFoundException('Attachment not found or access denied');
     }
 
     const attachment = mail.attachments[0];
+    const sharedAttachment = mail.internalMailDelivery?.internalMail.attachments[0];
+
+    if (!attachment && sharedAttachment?.storageKey) {
+      const s3Response = await this.s3.send(new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: sharedAttachment.storageKey,
+      }));
+      const sharedAttachmentBuffer = Buffer.from(await s3Response.Body!.transformToByteArray());
+
+      return {
+        buffer: sharedAttachmentBuffer,
+        filename: sharedAttachment.name,
+        mimetype: sharedAttachment.type,
+        size: sharedAttachment.size
+      };
+    }
+
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found or access denied');
+    }
 
     // get keys
     const rawMasterKeyHex = await this.redis.get(`masterkey:${userId}`);
@@ -353,6 +484,13 @@ export class MailService {
       data: { isArchived, isSpam } 
     });
 
+    void this.mailEventsService.emitToUser(userId, {
+      type: 'mail.updated',
+      mailId,
+      folder,
+      source: 'user',
+    });
+
     return { success: true, folder };
   }
 
@@ -370,6 +508,14 @@ export class MailService {
       data: { isArchived, isSpam }
     });
 
+    void this.mailEventsService.emitToUser(userId, {
+      type: 'mail.bulk-updated',
+      mailIds,
+      folder,
+      count: result.count,
+      source: 'user',
+    });
+
     return { movedCount: result.count, folder };
   }
 
@@ -377,6 +523,12 @@ export class MailService {
     const mail = await this.prisma.mail.findFirst({ where: { id: mailId, userId } });
     if (!mail) throw new NotFoundException('Mail not found');
     await this.prisma.mail.update({ where: { id: mailId }, data: { isRead } });
+    void this.mailEventsService.emitToUser(userId, {
+      type: 'mail.updated',
+      mailId,
+      isRead,
+      source: 'user',
+    });
     return { success: true };
   }
 
@@ -404,6 +556,12 @@ export class MailService {
 
     // delete from db
     const result = await this.prisma.mail.deleteMany({ where: { id: { in: mailIds }, userId } });
+    void this.mailEventsService.emitToUser(userId, {
+      type: 'mail.bulk-deleted',
+      mailIds,
+      count: result.count,
+      source: 'user',
+    });
     return { deletedCount: result.count };
   }
 
@@ -412,6 +570,13 @@ export class MailService {
       where: { id: { in: mailIds }, userId },
       data: { isArchived: true }
     });
+    void this.mailEventsService.emitToUser(userId, {
+      type: 'mail.bulk-updated',
+      mailIds,
+      folder: 'archive',
+      count: result.count,
+      source: 'user',
+    });
     return { archivedCount: result.count };
   }
 
@@ -419,6 +584,13 @@ export class MailService {
     const result = await this.prisma.mail.updateMany({
       where: { id: { in: mailIds }, userId },
       data: { isRead }
+    });
+    void this.mailEventsService.emitToUser(userId, {
+      type: 'mail.bulk-updated',
+      mailIds,
+      isRead,
+      count: result.count,
+      source: 'user',
     });
     return { updatedCount: result.count };
   }
@@ -544,6 +716,12 @@ export class MailService {
       subject: parsed.subject || dto.subject || '(No subject)',
       content: mailContent,
       attachments: preparedAttachments,
+    });
+
+    void this.mailEventsService.emitToUser(user.id, {
+      type: 'mail.created',
+      mailId: mail.id,
+      source: 'external',
     });
 
     this.logger.log(`Email from ${dto.from} for user '${username}' saved (Attachments: ${preparedAttachments.length})`);
