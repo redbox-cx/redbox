@@ -20,15 +20,15 @@ export function DashBoard() {
 
     const fetchMails = useCallback(() => {
         MailService.getAll(100, 0, 'unread')
-            .then(r => setUnreadMails(r.mails.filter(m => !m.isRead)))
+            .then(r => {
+                setUnreadMails(r.mails.filter(m => !m.isRead));
+                setMailStorageMb(Math.round(r.totalUsed / (1024 * 1024)));
+            })
             .catch(() => {});
     }, []);
 
     useEffect(() => {
         fetchMails();
-        MailService.getStorage()
-            .then(s => setMailStorageMb(s.usedMb))
-            .catch(() => {});
     }, []);
 
     useMailEvents(fetchMails);

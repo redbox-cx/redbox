@@ -46,6 +46,7 @@ export function MailPage() {
             const res = await MailService.getAll(PAGE_SIZE, p * PAGE_SIZE, s, f, q);
             setMails(res.mails);
             setTotalCount(res.totalCount);
+            setMailStorageMb(Math.round(res.totalUsed / (1024 * 1024)));
         } catch {}
         finally { setLoading(false); }
     };
@@ -55,7 +56,6 @@ export function MailPage() {
     useMailEvents(() => loadPage(page, sort, folder, debouncedSearch));
 
     useEffect(() => {
-        MailService.getStorage().then(s => setMailStorageMb(s.usedMb)).catch(() => {});
         MailService.getBlockedSenders().then(list => setBlockedSenders(new Set(list))).catch(() => {});
     }, []);
 

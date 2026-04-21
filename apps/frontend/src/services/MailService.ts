@@ -29,7 +29,7 @@ export type MailFolder = 'inbox' | 'archive' | 'spam' | 'all';
 export type MailSort = 'newest' | 'oldest' | 'unread' | 'read';
 
 export const MailService = {
-    async getAll(limit = 50, offset = 0, sort: MailSort = 'newest', folder: MailFolder = 'inbox', search?: string): Promise<{ mails: MailListItem[]; totalCount: number }> {
+    async getAll(limit = 50, offset = 0, sort: MailSort = 'newest', folder: MailFolder = 'inbox', search?: string): Promise<{ mails: MailListItem[]; totalCount: number; totalUsed: number; quotaLimit: number }> {
         const { data } = await apiClient.get('/mail', { params: { limit, offset, sort, folder, ...(search ? { search } : {}) } });
         return data.result;
     },
