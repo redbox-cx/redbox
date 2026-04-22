@@ -50,6 +50,7 @@ const ADMIN_INCOMING_MAIL_ALIASES = new Set([
   'team@redbox.cx',
   'moderation@redbox.cx',
   'about@redbox.cx',
+  'redbox@redbox.cx',
 ]);
 
 @Injectable()
