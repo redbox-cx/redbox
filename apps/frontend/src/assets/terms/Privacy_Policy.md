@@ -1,4 +1,4 @@
-# redbox
+# redbox.
 ## Privacy Policy
 Effective Date: April 20, 2026 · Platform: redbox.cx
 
