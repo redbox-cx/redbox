@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { Prisma, ReportedContentType } from '@prisma/client';
+import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 import { PrismaService } from 'src/prisma.service';
 import { CreateBugReportDto } from './dto/create-bug-report.dto';
 import { CreateContentReportDto } from './dto/create-content-report.dto';
@@ -32,25 +32,16 @@ type PreparedBugAttachment = {
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
   private readonly s3: S3Client;
-  private readonly bucket = process.env.S3_BUCKET_FILES || 'redbox-files';
+  private readonly bucket = requireBucket('S3_BUCKET_FILES');
 
   constructor(private readonly prismaService: PrismaService) {
-    this.s3 = new S3Client({
-      endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-      region: 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
-        secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
-      },
-      forcePathStyle: true,
-    });
+    this.s3 = createRequiredS3Client();
   }
 
   async createContentReport(dto: CreateContentReportDto) {
     const normalizedLink = dto.link.trim();
-    const extractedPassword = this.extractPasswordFromLink(normalizedLink);
-    const contentPassword = dto.contentPassword?.trim() || extractedPassword || null;
-    const target = await this.resolveContentTarget(normalizedLink, contentPassword);
+    const contentPassword = this.resolveSubmittedContentPassword(dto, normalizedLink);
+    const target = await this.resolveContentTarget(normalizedLink);
     const sanitizedLink = this.sanitizeContentLink(normalizedLink);
     const createData: Prisma.ContentReportUncheckedCreateInput = {
       contentType: target.contentType,
@@ -135,7 +126,6 @@ export class ReportsService {
 
   private async resolveContentTarget(
     link: string,
-    contentPassword: string | null,
   ): Promise<ResolvedContentTarget> {
     const parsedLink = this.parseContentLink(link);
 
@@ -149,19 +139,12 @@ export class ReportsService {
           id: true,
           userId: true,
           expiresAt: true,
-          passwordHash: true,
         },
       });
 
       if (!file || new Date() > file.expiresAt) {
         throw new NotFoundException('The reported upload could not be found');
       }
-
-      await this.assertProtectedContentPassword(
-        file.passwordHash,
-        contentPassword,
-        'upload',
-      );
 
       return {
         contentType: ReportedContentType.FILE,
@@ -180,19 +163,12 @@ export class ReportsService {
         id: true,
         userId: true,
         expiresAt: true,
-        passwordHash: true,
       },
     });
 
     if (!bin || (bin.expiresAt !== null && new Date() > bin.expiresAt)) {
       throw new NotFoundException('The reported bin could not be found');
     }
-
-    await this.assertProtectedContentPassword(
-      bin.passwordHash,
-      contentPassword,
-      'bin',
-    );
 
     return {
       contentType: ReportedContentType.BIN,
@@ -276,32 +252,6 @@ export class ReportsService {
     }
   }
 
-  private async assertProtectedContentPassword(
-    passwordHash: string | null,
-    contentPassword: string | null,
-    contentTypeLabel: 'upload' | 'bin',
-  ) {
-    if (!passwordHash) {
-      return;
-    }
-
-    if (!contentPassword) {
-      throw new BadRequestException(
-        `This ${contentTypeLabel} is password protected, so the report must include the password`,
-      );
-    }
-
-    const isMatch = await bcrypt.compare(contentPassword, passwordHash);
-    if (!isMatch) {
-      throw new BadRequestException(`The provided password for this ${contentTypeLabel} is invalid`);
-    }
-  }
-
-  private extractPasswordFromLink(link: string) {
-    const url = this.toUrl(link);
-    return url.searchParams.get('password')?.trim() || null;
-  }
-
   private sanitizeContentLink(link: string) {
     const isAbsolute = this.isAbsoluteUrl(link);
     const url = this.toUrl(link);
@@ -312,6 +262,24 @@ export class ReportsService {
     }
 
     return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  private resolveSubmittedContentPassword(dto: CreateContentReportDto, link: string) {
+    const submittedPassword = dto.contentPassword?.trim();
+    if (submittedPassword) {
+      return submittedPassword;
+    }
+
+    const passwordFromLink = this.toUrl(link).searchParams.get('password')?.trim();
+    if (!passwordFromLink) {
+      return null;
+    }
+
+    if (passwordFromLink.length > 100) {
+      throw new BadRequestException('Content password must have between 1 and 100 characters');
+    }
+
+    return passwordFromLink;
   }
 
   private isAbsoluteUrl(link: string) {

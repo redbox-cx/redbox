@@ -16,10 +16,10 @@ export const ReportService = {
         const hashIndex = link.indexOf('#');
         const baseLink = hashIndex !== -1 ? link.slice(0, hashIndex) : link;
         const hashFragment = hashIndex !== -1 ? link.slice(hashIndex) : '';
-        const linkWithPassword = contentPassword
-            ? `${baseLink}${baseLink.includes('?') ? '&' : '?'}password=${encodeURIComponent(contentPassword)}`
-            : baseLink;
-        const finalLink = `${linkWithPassword}${hashFragment}`;
-        await apiClient.post('/reports/content', { ...rest, link: finalLink });
+        await apiClient.post('/reports/content', {
+            ...rest,
+            link: `${baseLink}${hashFragment}`,
+            ...(contentPassword?.trim() ? { contentPassword: contentPassword.trim() } : {}),
+        });
     },
 };

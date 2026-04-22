@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserStatus } from '@prisma/client';
 import type { Request } from 'express';
 import { PrismaService } from 'src/prisma.service';
+import { requireEnv } from 'src/common/config/env';
 
 type JwtPayload = {
   sub: string;
@@ -12,10 +13,6 @@ type JwtPayload = {
 
 type SseRequest = Request & {
   user?: unknown;
-  query: Request['query'] & {
-    token?: string;
-    access_token?: string;
-  };
 };
 
 @Injectable()
@@ -36,7 +33,7 @@ export class MailSseAuthGuard implements CanActivate {
     let payload: JwtPayload;
     try {
       payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
-        secret: process.env.JWT_ACCESS_SECRET!,
+        secret: requireEnv('JWT_ACCESS_SECRET'),
       });
     } catch {
       throw new UnauthorizedException('Invalid access token');
@@ -64,6 +61,6 @@ export class MailSseAuthGuard implements CanActivate {
       return authHeader.slice('Bearer '.length);
     }
 
-    return request.query.token ?? request.query.access_token;
+    return null;
   }
 }

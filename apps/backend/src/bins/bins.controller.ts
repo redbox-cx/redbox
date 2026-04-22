@@ -1,11 +1,12 @@
 import { 
     Controller, Post, Get, Delete, Body, Param, 
-    UseGuards, Query, UseInterceptors, Req
+    UseGuards, UseInterceptors, Req
 } from '@nestjs/common';
 import { BinsService } from './bins.service';
 import { JwtAuthGuard } from 'src/auth/guard/auth.guard';
 import { GetUserId } from 'src/auth/decorator/get-user.decorator';
 import { CreateBinDto } from './dto/create-bin.dto';
+import { GetBinDto } from './dto/get-bin.dto';
 import { TransformInterceptor } from 'src/common/interceptors/transform.interceptor';
 import { RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
 import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
@@ -62,8 +63,28 @@ export class BinsController {
     async getBin(
         @Param('id') id: string,
         @Param('token') token: string,
-        @Query('password') password?: string,
         @Req() request?: Request
+    ) {
+        return this.fetchBin(id, token, request);
+    }
+
+    @Post(':id/:token')
+    @UseGuards(RateLimitGuard)
+    @RateLimit({ name: 'bins:get:ip', limit: 120, windowSeconds: 60, subject: 'ip' })
+    async getBinWithPassword(
+        @Param('id') id: string,
+        @Param('token') token: string,
+        @Body() dto: GetBinDto,
+        @Req() request?: Request
+    ) {
+        return this.fetchBin(id, token, request, dto.password);
+    }
+
+    private async fetchBin(
+        id: string,
+        token: string,
+        request?: Request,
+        password?: string,
     ) {
         const bin = await this.binsService.getBinContent(
             id,

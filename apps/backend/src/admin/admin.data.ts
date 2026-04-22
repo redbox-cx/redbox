@@ -29,6 +29,9 @@ export interface AdminContentReport {
   fileCreationDate: string;
   reason: string;
   reporterEmail: string | null;
+  hasContentPassword?: boolean;
+  contentPassword?: string | null;
+  contentPasswordAvailable?: boolean;
 }
 
 export interface AdminBugReport {

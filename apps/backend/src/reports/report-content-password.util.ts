@@ -1,19 +1,15 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import { requireEnv } from 'src/common/config/env';
 
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 
 function getReportPasswordSecret() {
-  const secret =
-    process.env.REPORT_CONTENT_SECRET ??
-    process.env.ADMIN_JWT_ACCESS_SECRET ??
-    process.env.JWT_ACCESS_SECRET;
-
-  if (!secret) {
+  try {
+    return createHash('sha256').update(requireEnv('REPORT_CONTENT_SECRET')).digest();
+  } catch {
     throw new InternalServerErrorException('Report password secret is not configured');
   }
-
-  return createHash('sha256').update(secret).digest();
 }
 
 export function encryptReportedContentPassword(password: string) {

@@ -2,6 +2,7 @@ import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import { GetUser, GetUserId } from 'src/auth/decorator/get-user.decorator';
+import { getClientIpAuditContext } from 'src/common/http/client-ip';
 import { RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
 import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { AdminJwtAuthGuard } from '../guard/admin-auth.guard';
@@ -63,31 +64,19 @@ export class AdminAuthController {
   }
 
   private getLoginAuditContext(request: Request) {
-    const cfConnectingIp = this.normalizeHeader(request.get('cf-connecting-ip'));
-    const trueClientIp = this.normalizeHeader(request.get('true-client-ip'));
-    const forwardedFor = this.normalizeHeader(request.get('x-forwarded-for'));
-    const forwardedClientIp = forwardedFor?.split(',')[0]?.trim() || null;
-    const requestIp = this.normalizeHeader(request.ip);
-    const remoteAddress = this.normalizeHeader(request.socket.remoteAddress);
-    const ipAddress =
-      cfConnectingIp ?? trueClientIp ?? forwardedClientIp ?? requestIp ?? remoteAddress;
+    const auditIp = getClientIpAuditContext(request);
+    const forwardedFor = auditIp.proxyTrusted
+      ? this.normalizeHeader(request.get('x-forwarded-for'))
+      : null;
 
     return {
-      ipAddress,
-      ipSource: cfConnectingIp
-        ? 'cf-connecting-ip'
-        : trueClientIp
-          ? 'true-client-ip'
-          : forwardedClientIp
-            ? 'x-forwarded-for'
-            : requestIp
-              ? 'request-ip'
-              : remoteAddress
-                ? 'remote-address'
-                : null,
+      ipAddress: auditIp.ipAddress,
+      ipSource: auditIp.ipSource,
       userAgent: this.truncateHeader(this.normalizeHeader(request.get('user-agent'))),
       forwardedFor: this.truncateHeader(forwardedFor),
       cfRay: this.truncateHeader(this.normalizeHeader(request.get('cf-ray'))),
+      remoteAddress: auditIp.remoteAddress,
+      proxyTrusted: auditIp.proxyTrusted,
     };
   }
 

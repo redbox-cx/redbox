@@ -14,13 +14,14 @@ import { AdminNotificationsModule } from './notifications/admin-notifications.mo
 import { AdminReportsModule } from './reports/admin-reports.module';
 import { AdminRoutesModule } from './routes/admin-routes.module';
 import { AdminUsersModule } from './users/admin-users.module';
+import { requireEnv } from '../common/config/env';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     RedisModule.forRoot({
       type: 'single',
-      url: 'redis://localhost:6379',
+      url: requireEnv('REDIS_URL'),
     }),
     PrismaModule,
     RateLimitModule,

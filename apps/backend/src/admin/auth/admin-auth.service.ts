@@ -5,6 +5,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { AdminChangePasswordDto, AdminLoginDto } from '../dto/auth.dto';
 import { AuditActorType } from '@prisma/client';
+import { requireEnv } from 'src/common/config/env';
 
 type AdminLoginAuditContext = {
   ipAddress: string | null;
@@ -12,6 +13,8 @@ type AdminLoginAuditContext = {
   userAgent: string | null;
   forwardedFor: string | null;
   cfRay: string | null;
+  remoteAddress: string | null;
+  proxyTrusted: boolean;
 };
 
 @Injectable()
@@ -26,12 +29,12 @@ export class AdminAuthService {
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: process.env.ADMIN_JWT_ACCESS_SECRET ?? process.env.JWT_ACCESS_SECRET,
-        expiresIn: (process.env.ADMIN_EXPIRES_IN_ACCESS ?? process.env.EXPIRES_IN_ACCESS ?? '5m') as never,
+        secret: requireEnv('ADMIN_JWT_ACCESS_SECRET'),
+        expiresIn: (process.env.ADMIN_EXPIRES_IN_ACCESS ?? '5m') as never,
       }),
       this.jwtService.signAsync(payload, {
-        secret: process.env.ADMIN_JWT_REFRESH_SECRET ?? process.env.JWT_REFRESH_SECRET,
-        expiresIn: (process.env.ADMIN_EXPIRES_IN_REFRESH ?? process.env.EXPIRES_IN_REFRESH ?? '1d') as never,
+        secret: requireEnv('ADMIN_JWT_REFRESH_SECRET'),
+        expiresIn: (process.env.ADMIN_EXPIRES_IN_REFRESH ?? '1d') as never,
       }),
     ]);
 
@@ -68,6 +71,8 @@ export class AdminAuthService {
           userAgent: auditContext.userAgent,
           forwardedFor: auditContext.forwardedFor,
           cfRay: auditContext.cfRay,
+          remoteAddress: auditContext.remoteAddress,
+          proxyTrusted: auditContext.proxyTrusted,
         },
       },
     });

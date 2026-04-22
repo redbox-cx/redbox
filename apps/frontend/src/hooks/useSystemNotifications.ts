@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useAuth } from '../context/AuthContext';
 
 export interface SystemNotification {
@@ -42,29 +43,48 @@ export function useSystemNotifications() {
         const token = localStorage.getItem('access_token');
         if (!token) return;
 
-        const base = import.meta.env.VITE_API_URL as string;
-        const es = new EventSource(`${base}/notifications/events?token=${encodeURIComponent(token)}`);
+        const baseUrl = import.meta.env.VITE_API_URL as string;
+        const ctrl = new AbortController();
 
-        es.addEventListener('notification.snapshot', (e: MessageEvent) => {
-            const data = JSON.parse(e.data);
-            const dismissed = getDismissed();
-            const now = new Date();
-            const active = (data.notifications as SystemNotification[]).filter(
-                n => new Date(n.expiresAt) > now && !dismissed.has(n.id)
-            );
-            setNotifications(active);
-        });
+        fetchEventSource(`${baseUrl}/notifications/events`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: ctrl.signal,
+            openWhenHidden: true,
+            onmessage(event) {
+                if (!event.data) return;
 
-        es.addEventListener('notification.created', (e: MessageEvent) => {
-            const data = JSON.parse(e.data);
-            const n: SystemNotification = data.notification;
-            const dismissed = getDismissed();
-            if (new Date(n.expiresAt) > new Date() && !dismissed.has(n.id)) {
-                setNotifications(prev => [n, ...prev]);
-            }
-        });
+                if (event.event === 'notification.snapshot') {
+                    const data = JSON.parse(event.data);
+                    const dismissed = getDismissed();
+                    const now = new Date();
+                    const active = (data.notifications as SystemNotification[]).filter(
+                        n => new Date(n.expiresAt) > now && !dismissed.has(n.id)
+                    );
+                    setNotifications(active);
+                    return;
+                }
 
-        return () => es.close();
+                if (event.event === 'notification.created') {
+                    const data = JSON.parse(event.data);
+                    const n: SystemNotification = data.notification;
+                    const dismissed = getDismissed();
+                    if (new Date(n.expiresAt) > new Date() && !dismissed.has(n.id)) {
+                        setNotifications(prev => [n, ...prev]);
+                    }
+                }
+            },
+            async onopen(response) {
+                if (response.status === 401 || response.status === 404) {
+                    ctrl.abort();
+                }
+            },
+            onerror() {
+            },
+        }).catch(() => {});
+
+        return () => {
+            ctrl.abort();
+        };
     }, [isAuthenticated]);
 
     // Auto-remove expired notifications

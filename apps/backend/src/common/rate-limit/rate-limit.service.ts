@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import type { Request } from 'express';
 import { Redis } from 'ioredis';
 import { Observable, Subscription } from 'rxjs';
+import { getClientIp as resolveTrustedClientIp } from '../http/client-ip';
 import type { RateLimitResult, RateLimitRule } from './rate-limit.types';
 import { RateLimitExceededException } from './rate-limit.exception';
 
@@ -14,14 +15,7 @@ export class RateLimitService {
   constructor(@InjectRedis() private readonly redis: Redis) {}
 
   getClientIp(request: Request) {
-    const cfConnectingIp = this.normalizeHeader(request.get('cf-connecting-ip'));
-    const trueClientIp = this.normalizeHeader(request.get('true-client-ip'));
-    const forwardedFor = this.normalizeHeader(request.get('x-forwarded-for'));
-    const forwardedClientIp = forwardedFor?.split(',')[0]?.trim() || null;
-    const requestIp = this.normalizeHeader(request.ip);
-    const remoteAddress = this.normalizeHeader(request.socket.remoteAddress);
-
-    return cfConnectingIp ?? trueClientIp ?? forwardedClientIp ?? requestIp ?? remoteAddress ?? 'unknown';
+    return resolveTrustedClientIp(request);
   }
 
   async consumeRule(rule: RateLimitRule, subject: string): Promise<RateLimitResult> {
@@ -166,10 +160,5 @@ export class RateLimitService {
 
   private hash(value: string) {
     return createHash('sha256').update(value).digest('hex').slice(0, 32);
-  }
-
-  private normalizeHeader(value: string | undefined) {
-    const normalized = value?.trim();
-    return normalized ? normalized : null;
   }
 }

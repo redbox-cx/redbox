@@ -31,10 +31,7 @@ export function DownloadCard({ fileId, token, keyHex }: Props) {
     const [isPasswordProtected, setIsPasswordProtected] = useState(false);
     const downloadLinkRef = useRef<HTMLAnchorElement>(null);
 
-    const buildUrl = (pwd?: string) => {
-        const base = `${import.meta.env.VITE_API_URL}/files/download/${fileId}?token=${token}`;
-        return pwd ? `${base}&password=${encodeURIComponent(pwd)}` : base;
-    };
+    const buildUrl = () => `${import.meta.env.VITE_API_URL}/files/download/${fileId}?token=${token}`;
 
     const parseFileName = (contentDisposition: string | null): string => {
         if (!contentDisposition) return 'download';
@@ -68,8 +65,13 @@ export function DownloadCard({ fileId, token, keyHex }: Props) {
         setErrorMsg('');
 
         try {
-            const response = await fetch(buildUrl(pwd), {
-                headers: { Authorization: `Bearer ${localStorage.getItem('access_token') ?? ''}` },
+            const response = await fetch(buildUrl(), {
+                method: pwd ? 'POST' : 'GET',
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem('access_token') ?? ''}`,
+                    ...(pwd ? { 'Content-Type': 'application/json' } : {}),
+                },
+                body: pwd ? JSON.stringify({ password: pwd }) : undefined,
             });
 
             if (response.status === 403) {

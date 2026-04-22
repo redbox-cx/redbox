@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { marked } from 'marked';
 import { BinWriteForm } from './BinWriteForm';
 import { BinPreviewArea } from './BinPreviewArea';
 import { BinQuota } from './BinQuota';
+import { renderSafeMarkdown } from '../../utils/safeMarkdown';
 
 type PreviewMode = 'plain' | 'code' | 'markdown';
 
@@ -33,7 +33,7 @@ export function BinEditorPanel({ binCount, onSave }: Props) {
     const [error, setError] = useState('');
 
     const markdownHtml = isPreview && previewMode === 'markdown'
-        ? marked.parse(content, { async: false }) as string : '';
+        ? renderSafeMarkdown(content) : '';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

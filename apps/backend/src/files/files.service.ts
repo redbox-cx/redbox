@@ -16,6 +16,7 @@ import { Readable } from 'stream';
 import { memoryStorage } from 'multer';
 import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
 import { RateLimitExceededException } from 'src/common/rate-limit/rate-limit.exception';
+import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 
 const MAX_ACTIVE_UPLOADS_PER_USER = 3;
 const UPLOAD_META_TTL_SECONDS = 86400;
@@ -25,22 +26,14 @@ export class FilesService {
     private readonly logger = new Logger(FilesService.name);
     private readonly MAX_QUOTA = 2 * 1024 * 1024 * 1024; // 2GB
     private readonly s3: S3Client;
-    private readonly bucket = process.env.S3_BUCKET_FILES || 'redbox-files';
+    private readonly bucket = requireBucket('S3_BUCKET_FILES');
 
     constructor(
         private prisma: PrismaService,
         @InjectRedis() private readonly redis: Redis,
         private readonly rateLimitService: RateLimitService,
     ) {
-        this.s3 = new S3Client({
-            endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-            region: 'us-east-1',
-            credentials: {
-                accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
-                secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
-            },
-            forcePathStyle: true,
-        });
+        this.s3 = createRequiredS3Client();
     }
 
     private calculateExpiration(expiresIn?: string): Date {

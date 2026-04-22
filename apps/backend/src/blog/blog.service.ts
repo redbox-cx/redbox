@@ -3,6 +3,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { BlogPostStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { SaveAdminBlogPostDto, UpdateAdminBlogPostDto, AdminBlogQueryDto } from 'src/admin/dto/blog.dto';
+import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 import { PrismaService } from 'src/prisma.service';
 import { BlogQueryDto } from './dto/blog-query.dto';
 
@@ -35,21 +36,10 @@ type NormalizedBlogInput = {
 @Injectable()
 export class BlogService {
   private readonly s3: S3Client;
-  private readonly bucket =
-    process.env.S3_BUCKET_BLOGS ||
-    process.env.S3_BUCKET_FILES ||
-    'redbox-files';
+  private readonly bucket = requireBucket('S3_BUCKET_BLOGS');
 
   constructor(private readonly prismaService: PrismaService) {
-    this.s3 = new S3Client({
-      endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-      region: 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
-        secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
-      },
-      forcePathStyle: true,
-    });
+    this.s3 = createRequiredS3Client();
   }
 
   async getAdminBlogPosts(query: AdminBlogQueryDto) {

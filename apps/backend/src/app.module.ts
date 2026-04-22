@@ -13,6 +13,7 @@ import { ReportsModule } from './reports/reports.module';
 import { BlogModule } from './blog/blog.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
+import { requireEnv } from './common/config/env';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { RateLimitModule } from './common/rate-limit/rate-limit.module';
     ScheduleModule.forRoot(),
     RedisModule.forRoot({
       type: 'single',
-      url: `redis://localhost:6379`, 
+      url: requireEnv('REDIS_URL'),
     }),
     PrismaModule,
     RateLimitModule,

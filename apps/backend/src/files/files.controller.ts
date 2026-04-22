@@ -15,6 +15,7 @@ import type { Response } from 'express';
 import { InitUploadDto } from './dto/init-upload.dto';
 import { UploadChunkDto } from './dto/upload-chunk.dto';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
+import { DownloadFileDto } from './dto/download-file.dto';
 import { RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
 import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
@@ -117,7 +118,32 @@ export class FilesController {
         @Query('token') token: string,
         @Res({ passthrough: true }) res: Response,
         @Req() request: Request,
-        @Query('password') password?: string
+    ) {
+        return this.streamDownload(id, token, res, request);
+    }
+
+    @Post('download/:id')
+    @UseGuards(RateLimitGuard)
+    @RateLimit(
+        { name: 'files:download:ip', limit: 40, windowSeconds: 60, subject: 'ip' },
+        { name: 'files:download:file-ip', limit: 120, windowSeconds: 60 * 60, subject: 'param-ip', paramName: 'id' },
+    )
+    async downloadWithPassword(
+        @Param('id') id: string,
+        @Query('token') token: string,
+        @Body() dto: DownloadFileDto,
+        @Res({ passthrough: true }) res: Response,
+        @Req() request: Request,
+    ) {
+        return this.streamDownload(id, token, res, request, dto.password);
+    }
+
+    private async streamDownload(
+        id: string,
+        token: string,
+        res: Response,
+        request: Request,
+        password?: string,
     ) {
         if (!token) throw new BadRequestException('Share token is required');
         const fileData = await this.filesService.downloadFile(

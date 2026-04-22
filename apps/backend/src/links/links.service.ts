@@ -2,6 +2,9 @@ import { Injectable, BadRequestException, NotFoundException, ForbiddenException 
 import { PrismaService } from 'src/prisma.service';
 import { randomBytes } from 'crypto';
 
+const SHORT_CODE_BYTES = 3;
+const MAX_SHORT_CODE_ATTEMPTS = 8;
+
 @Injectable()
 export class LinksService {
   constructor(private prisma: PrismaService) {}
@@ -17,17 +20,23 @@ export class LinksService {
       throw new BadRequestException(`You have reached the limit of ${linkLimit} links.`);
     }
 
-    // generate short code
-    const shortCode = randomBytes(3).toString('hex');
+    for (let attempt = 0; attempt < MAX_SHORT_CODE_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.prisma.link.create({
+          data: {
+            originalUrl: url,
+            shortCode: this.createShortCode(),
+            userId,
+          },
+        });
+      } catch (error) {
+        if (!this.isUniqueConflict(error)) {
+          throw error;
+        }
+      }
+    }
 
-    // save in db
-    return this.prisma.link.create({
-      data: {
-        originalUrl: url,
-        shortCode,
-        userId,
-      },
-    });
+    throw new BadRequestException('Could not generate a unique short code');
   }
 
   async findAllByUser(userId: string) {
@@ -68,5 +77,13 @@ export class LinksService {
 
     if (!link) throw new NotFoundException('Link not found');
     return link.originalUrl;
+  }
+
+  private createShortCode() {
+    return randomBytes(SHORT_CODE_BYTES).toString('hex');
+  }
+
+  private isUniqueConflict(error: unknown) {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
   }
 }

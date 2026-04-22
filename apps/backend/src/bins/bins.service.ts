@@ -34,13 +34,9 @@ export class BinsService {
     private calculateExpiration(expiresIn?: string): Date | null {
         if (!expiresIn || expiresIn === '30d') return addDays(new Date(), 30);
         if (expiresIn === 'never') return null;
-
-        const amount = parseInt(expiresIn.slice(0, -1));
-        if (isNaN(amount)) return addDays(new Date(), 30);
-        const unit = expiresIn.slice(-1);
-
-        if (unit === 'd') return addDays(new Date(), amount);
-        if (unit === 'h') return addHours(new Date(), amount);
+        if (expiresIn === '1h') return addHours(new Date(), 1);
+        if (expiresIn === '24h') return addHours(new Date(), 24);
+        if (expiresIn === '7d') return addDays(new Date(), 7);
         
         return addDays(new Date(), 30);
     }

@@ -2,13 +2,14 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
+import { requireEnv } from 'src/common/config/env';
 
 @Injectable()
 export class AdminRtStrategy extends PassportStrategy(Strategy, 'admin-jwt-refresh') {
   constructor() {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: process.env.ADMIN_JWT_REFRESH_SECRET ?? process.env.JWT_REFRESH_SECRET!,
+      secretOrKey: requireEnv('ADMIN_JWT_REFRESH_SECRET'),
       passReqToCallback: true,
     });
   }

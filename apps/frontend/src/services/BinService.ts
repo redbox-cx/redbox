@@ -35,8 +35,10 @@ export const BinService = {
     },
 
     async get(id: string, token: string, password?: string): Promise<BinContent> {
-        const params = password ? { password } : {};
-        const { data } = await apiClient.get(`/bins/${id}/${token}`, { params });
+        const response = password
+            ? await apiClient.post(`/bins/${id}/${token}`, { password })
+            : await apiClient.get(`/bins/${id}/${token}`);
+        const { data } = response;
         return data.result;
     },
 

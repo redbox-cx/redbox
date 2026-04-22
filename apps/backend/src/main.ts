@@ -7,6 +7,22 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { json, urlencoded } from 'express';
 import { PrismaService } from './prisma.service';
 import { startMainAppDashboardTelemetry } from './common/dashboard/runtime-tracker';
+import { timingSafeEqual } from 'crypto';
+import { requireEnv } from './common/config/env';
+
+function isValidSecret(input: string | string[] | undefined, expected: string) {
+  if (typeof input !== 'string') {
+    return false;
+  }
+
+  const inputBuffer = Buffer.from(input);
+  const expectedBuffer = Buffer.from(expected);
+
+  return (
+    inputBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(inputBuffer, expectedBuffer)
+  );
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -22,6 +38,23 @@ async function bootstrap() {
 
 
   // --- Body Parser Limit (larger for /bins + mail endpoint) ---
+  app.use((req, res, next) => {
+    if (!req.originalUrl.startsWith('/api/v1/mail/incoming')) {
+      next();
+      return;
+    }
+
+    if (!isValidSecret(req.headers['x-redbox-webhook-secret'], requireEnv('MAIL_WEBHOOK_SECRET'))) {
+      res.status(401).json({
+        status: 'Error',
+        message: 'Invalid Webhook Secret',
+        result: null,
+      });
+      return;
+    }
+
+    next();
+  });
 
   app.use((req, res, next) => {
     // Cloudflare Incoming Mail (max 25MB Mail + JSON Overhead = ~35MB)

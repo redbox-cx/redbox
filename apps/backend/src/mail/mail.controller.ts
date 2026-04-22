@@ -13,6 +13,7 @@ import { MailSseAuthGuard } from './guard/mail-sse-auth.guard';
 import { RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
 import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
+import { requireEnv } from 'src/common/config/env';
 import {
   BulkMailDto,
   MarkReadDto,
@@ -112,11 +113,13 @@ export class MailController {
   ) {
     const file = await this.mailService.downloadAttachment(userId, mailId, attachmentId);
 
-    // set header
+    const safeName = file.filename.replace(/[^\w.\-]/g, '_');
+    const encodedName = encodeURIComponent(file.filename);
+
     res.set({
       'Content-Type': file.mimetype,
       'Content-Length': file.buffer.length,
-      'Content-Disposition': `attachment; filename="${file.filename}"`
+      'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`,
     });
     
     res.send(file.buffer);
@@ -217,7 +220,7 @@ export class MailController {
       throw new UnauthorizedException('Missing Webhook Secret');
     }
 
-    const secretBuffer = Buffer.from(process.env.MAIL_WEBHOOK_SECRET || '');
+    const secretBuffer = Buffer.from(requireEnv('MAIL_WEBHOOK_SECRET'));
     const inputBuffer = Buffer.from(webhookSecret);
 
     if (secretBuffer.length !== inputBuffer.length || !timingSafeEqual(secretBuffer, inputBuffer)) {

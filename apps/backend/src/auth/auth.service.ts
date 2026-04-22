@@ -13,6 +13,7 @@ import { Redis } from 'ioredis';
 import {InjectRedis} from '@nestjs-modules/ioredis';
 import * as bip39 from 'bip39';
 import { UserStatus } from '@prisma/client';
+import { requireEnv } from 'src/common/config/env';
 
 
 const scryptAsync = promisify(scrypt);
@@ -104,7 +105,7 @@ export class AuthService {
     }
 
     private getReactivationSecret() {
-        return process.env.JWT_REACTIVATION_SECRET || process.env.JWT_ACCESS_SECRET!;
+        return requireEnv('JWT_REACTIVATION_SECRET');
     }
 
     private getReactivationExpiry() {
@@ -147,14 +148,14 @@ export class AuthService {
             this.jwtService.signAsync(
                 payload,
                 { 
-                secret: process.env.JWT_ACCESS_SECRET, 
+                secret: requireEnv('JWT_ACCESS_SECRET'),
                 expiresIn: (process.env.EXPIRES_IN_ACCESS || '5m') as any 
             },
             ),
             this.jwtService.signAsync(
                 payload,
                 { 
-                secret: process.env.JWT_REFRESH_SECRET, 
+                secret: requireEnv('JWT_REFRESH_SECRET'),
                 expiresIn: (process.env.EXPIRES_IN_REFRESH || '1d') as any
             },
             ),  
