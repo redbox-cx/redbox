@@ -12,6 +12,7 @@ import {
 import { RateLimitService } from './rate-limit.service';
 import type { RateLimitRule } from './rate-limit.types';
 import { RateLimitExceededException } from './rate-limit.exception';
+import { resolveIncomingMailboxUsername } from '../mail/admin-mail-aliases';
 
 const ADMIN_READ_RULE: RateLimitRule = {
   name: 'admin:read',
@@ -26,17 +27,6 @@ const ADMIN_WRITE_RULE: RateLimitRule = {
   windowSeconds: 5 * 60,
   subject: 'admin',
 };
-
-const ADMIN_INCOMING_MAIL_ALIASES = new Set([
-  'admin@redbox.cx',
-  'support@redbox.cx',
-  'contact@redbox.cx',
-  'no-reply@redbox.cx',
-  'help@redbox.cx',
-  'team@redbox.cx',
-  'moderation@redbox.cx',
-  'about@redbox.cx',
-]);
 
 type RateLimitRequest = Request & {
   user?: {
@@ -132,22 +122,10 @@ export class RateLimitGuard implements CanActivate {
     }
 
     if (rule.subject === 'mail-recipient') {
-      return `mail-recipient:${this.resolveIncomingMailboxUsername(request.body?.to)}`;
+      return `mail-recipient:${resolveIncomingMailboxUsername(request.body?.to)}`;
     }
 
     return `unknown:${ip}`;
-  }
-
-  private resolveIncomingMailboxUsername(rawTo: unknown) {
-    const to = this.normalizeValue(rawTo);
-    const emailMatch = to.match(/<([^>]+)>/);
-    const cleanEmail = (emailMatch ? emailMatch[1] : to).toLowerCase().trim();
-
-    if (ADMIN_INCOMING_MAIL_ALIASES.has(cleanEmail)) {
-      return 'admin';
-    }
-
-    return cleanEmail.split('@')[0]?.trim() || 'unknown';
   }
 
   private normalizeValue(value: unknown) {

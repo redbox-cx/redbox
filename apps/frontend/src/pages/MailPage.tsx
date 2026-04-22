@@ -86,7 +86,7 @@ export function MailPage() {
     }), [mails, sort]);
 
     const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-    const userEmail = (mails[0]?.to ?? '__user__@redbox.cx').replace('__user__', user?.username ?? 'user');
+    const userEmail = `${user?.username ?? 'user'}@redbox.cx`;
     const isAllChecked = displayed.length > 0 && displayed.every(m => checkedIds.has(m.id));
     const anyChecked = checkedIds.size > 0;
 

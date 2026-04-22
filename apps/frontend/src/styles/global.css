@@ -6700,6 +6700,15 @@ html.dash-page {
     gap: 4px;
 }
 
+.mc-row-recipient {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-inactive);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .mc-page-numbers {
     display: flex;
     align-items: center;
@@ -7059,6 +7068,12 @@ html.dash-page {
 .mc-detail-sender-email {
     font-size: 0.78rem;
     color: var(--color-text-muted);
+    word-break: break-all;
+}
+
+.mc-detail-recipient-email {
+    font-size: 0.76rem;
+    color: var(--color-inactive);
     word-break: break-all;
 }
 

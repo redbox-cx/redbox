@@ -161,7 +161,9 @@ export function MailListPanel({
                         <div className="empty-bins"><i className="bi bi-inbox" /><span>{search ? 'No results' : 'Your inbox is empty'}</span></div>
                     ) : mails.map(mail => {
                         const sender = parseSender(mail.from);
+                        const recipient = parseSender(mail.to);
                         const isBlockedSender = blockedSenders.has(sender.email);
+                        const showRecipient = recipient.email.toLowerCase() !== userEmail.toLowerCase();
                         return (
                             <div
                                 key={mail.id}
@@ -185,6 +187,7 @@ export function MailListPanel({
                                         {mail.subject || '(No subject)'}
                                         {mail.hasAttachments && <i className="bi bi-paperclip mc-row-attach" />}
                                     </span>
+                                    {showRecipient && <span className="mc-row-recipient">To: {recipient.email}</span>}
                                 </div>
                             </div>
                         );

@@ -13,11 +13,11 @@ import { ReportsModule } from './reports/reports.module';
 import { BlogModule } from './blog/blog.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
-import { requireEnv } from './common/config/env';
+import { backendEnvFilePaths, requireEnv } from './common/config/env';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: backendEnvFilePaths }),
     ScheduleModule.forRoot(),
     RedisModule.forRoot({
       type: 'single',

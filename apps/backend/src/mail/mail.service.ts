@@ -10,6 +10,11 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
 import { MailEventsService, type MailPushEventType } from './mail-events.service';
 import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
+import {
+  extractMailAddress,
+  resolveIncomingMailboxUsername,
+  resolveIncomingRecipientAddress,
+} from 'src/common/mail/admin-mail-aliases';
 
 
 type MailboxUser = {
@@ -40,18 +45,6 @@ type SharedInternalAttachmentInput = {
   mimetype: string;
   size: number;
 };
-
-const ADMIN_INCOMING_MAIL_ALIASES = new Set([
-  'admin@redbox.cx',
-  'support@redbox.cx',
-  'contact@redbox.cx',
-  'no-reply@redbox.cx',
-  'help@redbox.cx',
-  'team@redbox.cx',
-  'moderation@redbox.cx',
-  'about@redbox.cx',
-  'redbox@redbox.cx',
-]);
 
 @Injectable()
 export class MailService {
@@ -692,9 +685,12 @@ export class MailService {
 
   // --- INCOMING MAIL ---
   async processIncomingMail(dto: IncomingMailDto) {
-    const emailMatch = dto.to.match(/<([^>]+)>/);
-    const cleanEmail = (emailMatch ? emailMatch[1] : dto.to).toLowerCase().trim();
-    const username = this.resolveIncomingMailboxUsername(cleanEmail);
+    const parsed = await simpleParser(dto.raw);
+    const parsedRecipient = Array.isArray(parsed.to)
+      ? parsed.to.map((recipient) => recipient.text).find(Boolean)
+      : parsed.to?.text;
+    const cleanEmail = resolveIncomingRecipientAddress(parsedRecipient, dto.to);
+    const username = resolveIncomingMailboxUsername(cleanEmail);
 
     if (username.includes('*')) {
       this.logger.warn(`Ignored external mail with broadcast recipient: ${cleanEmail}`);
@@ -705,13 +701,15 @@ export class MailService {
     }
 
     const user = await this.prisma.user.findUnique({ where: { username } });
-    if (!user) return { status: 'ignored', reason: 'User not found' };
+    if (!user) {
+      this.logger.warn(`Ignored external mail for ${cleanEmail}: resolved mailbox user '${username}' was not found`);
+      return { status: 'ignored', reason: 'User not found' };
+    }
     if (user.status !== UserStatus.ACTIVE) {
       return { status: 'ignored', reason: 'User account is not active' };
     }
 
-    const fromMatch = dto.from.match(/<([^>]+)>/);
-    const senderEmail = (fromMatch ? fromMatch[1] : dto.from).toLowerCase().trim();
+    const senderEmail = extractMailAddress(dto.from);
     const isBlocked = await this.prisma.blockedSender.findUnique({
       where: { userId_email: { userId: user.id, email: senderEmail } }
     });
@@ -720,7 +718,6 @@ export class MailService {
       return { status: 'ignored', reason: 'Sender is blocked' };
     }
 
-    const parsed = await simpleParser(dto.raw);
     const mailContent = parsed.html || parsed.textAsHtml || parsed.text || '(No content)';
     const contentSize = Buffer.byteLength(mailContent, 'utf8');
 
@@ -746,7 +743,7 @@ export class MailService {
 
     const mail = await this.storeMailboxMailForUser(user, {
       from: dto.from,
-      to: dto.to,
+      to: cleanEmail,
       subject: parsed.subject || dto.subject || '(No subject)',
       content: mailContent,
       attachments: preparedAttachments,
@@ -762,14 +759,6 @@ export class MailService {
       `Email from ${dto.from} for user '${username}' saved (Recipient: ${cleanEmail}, Attachments: ${preparedAttachments.length})`,
     );
     return { status: 'success', mailId: mail.id };
-  }
-
-  private resolveIncomingMailboxUsername(cleanEmail: string) {
-    if (ADMIN_INCOMING_MAIL_ALIASES.has(cleanEmail)) {
-      return 'admin';
-    }
-
-    return cleanEmail.split('@')[0].toLowerCase().trim();
   }
 
   private async storeMailboxMailForUser(user: MailboxUser, input: StoredMailboxMailInput) {

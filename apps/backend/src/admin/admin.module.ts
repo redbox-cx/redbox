@@ -14,11 +14,11 @@ import { AdminNotificationsModule } from './notifications/admin-notifications.mo
 import { AdminReportsModule } from './reports/admin-reports.module';
 import { AdminRoutesModule } from './routes/admin-routes.module';
 import { AdminUsersModule } from './users/admin-users.module';
-import { requireEnv } from '../common/config/env';
+import { backendEnvFilePaths, requireEnv } from '../common/config/env';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: backendEnvFilePaths }),
     RedisModule.forRoot({
       type: 'single',
       url: requireEnv('REDIS_URL'),

@@ -1,3 +1,5 @@
+export const backendEnvFilePaths = ['apps/backend/.env', '.env'];
+
 export function requireEnv(name: string) {
   const value = process.env[name]?.trim();
 

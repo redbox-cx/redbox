@@ -29,6 +29,7 @@ export function MailDetailPanel({
     const [isUnblocking, setIsUnblocking] = useState(false);
 
     const senderEmail = selected ? parseSender(selected.from).email : '';
+    const recipientEmail = selected ? parseSender(selected.to).email : '';
     const isBlocked = blockedSenders.has(senderEmail);
 
     const handleBlockConfirm = async () => {
@@ -146,6 +147,7 @@ export function MailDetailPanel({
                                             <>
                                                 {s.name !== s.email && <span className="mc-detail-sender-name">{s.name}</span>}
                                                 <span className="mc-detail-sender-email">{s.email}</span>
+                                                {recipientEmail && <span className="mc-detail-recipient-email">To: {recipientEmail}</span>}
                                                 {isBlocked && <span className="mc-blocked-badge"><i className="bi bi-slash-circle" /> Blocked</span>}
                                                 <span className="mc-detail-ts">{formatFull(selected.createdAt)}</span>
                                             </>
