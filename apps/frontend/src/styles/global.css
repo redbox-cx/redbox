@@ -1669,6 +1669,14 @@ html.ss-dark .hero-section {
     transform: translateY(0);
 }
 
+.mail-pub-row--reverse {
+    flex-direction: row-reverse;
+}
+
+.mail-pub-row--spaced {
+    margin-bottom: 80px;
+}
+
 .mail-pub-text {
     flex: 1;
     display: flex;
