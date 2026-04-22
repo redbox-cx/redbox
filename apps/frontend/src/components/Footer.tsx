@@ -64,9 +64,16 @@ export function Footer() {
                 <div className="footer-column">
                     <h4>Follow Us</h4>
                     <div className="social-links">
-                        <a href="#"><i className="bi bi-github"></i></a>
-                        <a href="#"><i className="bi bi-discord"></i></a>
-                        <a href="#"><i className="bi bi-twitter-x"></i></a>
+                        <a href="https://github.com/redbox-cx" target="_blank" rel="noreferrer"><i className="bi bi-github"></i></a>
+                        <a href="https://github.com/no-e1" target="_blank" rel="noreferrer" className="footer-avatar-link" title="no-e1">
+                            <img src="https://avatars.githubusercontent.com/u/133690936" alt="no-e1" className="footer-avatar" />
+                        </a>
+                        <a href="https://github.com/henryzyy" target="_blank" rel="noreferrer" className="footer-avatar-link" title="henryzyy">
+                            <img src="https://avatars.githubusercontent.com/u/99895205" alt="henryzyy" className="footer-avatar" />
+                        </a>
+                        <a href="https://github.com/maksym981" target="_blank" rel="noreferrer" className="footer-avatar-link" title="maksym981">
+                            <img src="https://avatars.githubusercontent.com/u/64797492" alt="maksym981" className="footer-avatar" />
+                        </a>
                     </div>
                 </div>
             </div>

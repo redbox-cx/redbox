@@ -717,7 +717,8 @@ html.menu-open body {
 
 .social-links {
     display: flex;
-    gap: 20px;
+    align-items: center;
+    gap: 12px;
     margin-top: 10px;
 }
 
@@ -731,6 +732,20 @@ html.menu-open body {
 .social-links a:hover i {
     color: var(--color-primary);
     transform: translateY(-3px);
+}
+
+.footer-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    object-fit: cover;
+    opacity: 0.7;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.footer-avatar-link:hover .footer-avatar {
+    opacity: 1;
+    transform: translateY(-2px);
 }
 
 .footer-bottom {
