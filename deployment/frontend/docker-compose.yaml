@@ -1,0 +1,31 @@
+name: redbox-frontend
+
+services:
+  frontend:
+    image: redbox-frontend:latest
+    build:
+      context: ../..
+      dockerfile: deployment/Dockerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://api.redbox.cx/api/v1}
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks:
+      - redbox_frontend
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}"]
+    depends_on:
+      - frontend
+    networks:
+      - redbox_frontend
+
+networks:
+  redbox_frontend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

@@ -1,5 +1,4 @@
 s3/
-docker-compose.yaml
 .env
 *.env
 apps/**/.env

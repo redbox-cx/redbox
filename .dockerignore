@@ -1,0 +1,15 @@
+.git
+.tmp
+.vscode
+
+**/node_modules
+**/dist
+**/coverage
+
+**/.env
+**/.env.*
+!apps/backend/.env.example
+!apps/frontend/.env.example
+
+docs
+README.md

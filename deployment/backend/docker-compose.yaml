@@ -1,0 +1,178 @@
+name: redbox-backend
+
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-redbox_db}
+      MYSQL_USER: ${MYSQL_USER:-redbox}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    expose:
+      - "3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost --user=\"$${MYSQL_USER}\" --password=\"$${MYSQL_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - redbox_backend
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - redbox_backend
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    expose:
+      - "9000"
+      - "9001"
+    networks:
+      - redbox_backend
+
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      S3_BUCKET_FILES: ${S3_BUCKET_FILES:-redbox-files}
+      S3_BUCKET_MAILS: ${S3_BUCKET_MAILS:-redbox-mails}
+      S3_BUCKET_BLOGS: ${S3_BUCKET_BLOGS:-redbox-blogs}
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "until mc alias set redbox http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\"; do sleep 2; done &&
+      mc mb --ignore-existing redbox/\"$${S3_BUCKET_FILES}\" &&
+      mc mb --ignore-existing redbox/\"$${S3_BUCKET_MAILS}\" &&
+      mc mb --ignore-existing redbox/\"$${S3_BUCKET_BLOGS}\""
+    networks:
+      - redbox_backend
+
+  backend:
+    image: redbox-backend:latest
+    build:
+      context: ../..
+      dockerfile: deployment/Dockerfile.backend
+    restart: unless-stopped
+    command: ["node", "dist/src/main"]
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    expose:
+      - "3000"
+    networks:
+      - redbox_backend
+
+  admin-backend:
+    image: redbox-backend:latest
+    build:
+      context: ../..
+      dockerfile: deployment/Dockerfile.backend
+    restart: unless-stopped
+    command: ["node", "dist/src/main-admin"]
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    expose:
+      - "3001"
+    volumes:
+      - minio_data:/data/minio:ro
+    networks:
+      - redbox_backend
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}"]
+    depends_on:
+      - backend
+      - admin-backend
+    networks:
+      - redbox_backend
+
+  migrate:
+    image: redbox-backend:latest
+    profiles:
+      - tools
+    restart: "no"
+    command: ["pnpm", "prisma", "migrate", "deploy"]
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - redbox_backend
+
+  seed-admin:
+    image: redbox-backend:latest
+    profiles:
+      - tools
+    restart: "no"
+    command: ["pnpm", "ts-node", "prisma/seed.ts"]
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - redbox_backend
+
+volumes:
+  mariadb_data:
+  redis_data:
+  minio_data:
+
+networks:
+  redbox_backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16
