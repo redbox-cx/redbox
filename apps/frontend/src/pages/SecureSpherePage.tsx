@@ -7,7 +7,6 @@ import securesphereIcon from "@/assets/svg/securesphere-logo.svg";
 import sspImg1 from "@/assets/images/ssp-1.jpg";
 import sspImg2 from "@/assets/images/ssp-2.jpg";
 import sspImg3 from "@/assets/images/ssp-3.jpg";
-import DecryptedText from "../components/DecryptedText";
 import TiltedCard from "../components/TiltedCard";
 
 const fadeUp = {
@@ -50,15 +49,7 @@ export function SecureSpherePage() {
                             variants={fadeUp}
                             transition={{ duration: 0.7, ease: "easeOut" }}
                         >
-                            <DecryptedText
-                                text="SecureSphere"
-                                animateOn="view"
-                                sequential
-                                revealDirection="start"
-                                speed={80}
-                                maxIterations={14}
-                                characters="+*%&/()?!{$[]}"
-                            /><span className="dot">.</span>
+                            SecureSphere<span className="dot">.</span>
                         </motion.h1>
 
                         <motion.p
