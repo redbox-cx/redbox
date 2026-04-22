@@ -13,6 +13,8 @@ export interface SystemNotification {
 }
 
 const STORAGE_KEY = 'dismissed_notifications';
+const RECONNECT_DELAY_MS = 3000;
+const FALLBACK_SYNC_INTERVAL_MS = 15000;
 
 function getDismissed(): Set<string> {
     try {
@@ -71,6 +73,7 @@ export function useSystemNotifications() {
 
     useEffect(() => {
         if (!isAuthenticated) {
+            setNotifications([]);
             return;
         }
 
@@ -91,7 +94,7 @@ export function useSystemNotifications() {
             }
         };
 
-        const scheduleReconnect = (delayMs = 3000) => {
+        const scheduleReconnect = (delayMs = RECONNECT_DELAY_MS) => {
             if (closed || ctrl.signal.aborted || reconnectTimer !== null) return;
 
             reconnectTimer = window.setTimeout(() => {
@@ -135,10 +138,14 @@ export function useSystemNotifications() {
                 },
                 async onopen(response) {
                     if (response.ok) {
+                        void loadActiveNotifications();
                         return;
                     }
 
                     throw new Error(`System notification stream failed with ${response.status}`);
+                },
+                onclose() {
+                    throw new Error('System notification stream closed');
                 },
                 onerror(error) {
                     throw error;
@@ -152,12 +159,18 @@ export function useSystemNotifications() {
 
         connectStream();
         void loadActiveNotifications();
+        const fallbackSync = window.setInterval(() => {
+            if (!closed) {
+                void loadActiveNotifications();
+            }
+        }, FALLBACK_SYNC_INTERVAL_MS);
 
         return () => {
             closed = true;
             if (reconnectTimer !== null) {
                 window.clearTimeout(reconnectTimer);
             }
+            window.clearInterval(fallbackSync);
             ctrl.abort();
         };
     }, [isAuthenticated]);

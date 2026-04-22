@@ -27,7 +27,7 @@ export function Upload() {
             setFilesError('');
         } catch (err: any) {
             setFilesError(err?.response?.status === 401
-                ? 'Session expired — please log out and log back in.'
+                ? 'Session expired - please log out and log back in.'
                 : 'Could not load files.');
         } finally {
             setLoadingFiles(false);

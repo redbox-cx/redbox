@@ -25,6 +25,17 @@ function getFileIcon(mime: string): string {
     return 'bi-file-earmark';
 }
 
+function getUploadErrorMessage(err: any): string {
+    const status = err?.response?.status;
+    const message = err?.response?.data?.message ?? err?.message;
+
+    if (status === 401 || message === 'Session expired') {
+        return 'Session expired - please log out and log back in before uploading.';
+    }
+
+    return message ?? 'Upload failed';
+}
+
 interface Props {
     totalUsed: number;
     onUploaded: () => void;
@@ -103,7 +114,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                 setProgress(0);
             }, 2500);
         } catch (err: any) {
-            setErrorMsg(err?.response?.data?.message ?? err?.message ?? 'Upload failed');
+            setErrorMsg(getUploadErrorMessage(err));
             setPhase('error');
         }
     };

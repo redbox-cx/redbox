@@ -22,7 +22,6 @@ import { Settings } from "../pages/Settings";
 import { MailPage } from "../pages/MailPage";
 import { SecureSphere } from "../pages/SecureSphere";
 import { ProtectedRoute } from "./ProtectedRoute";
-import { SystemNotificationToast } from "../components/notifications/SystemNotificationToast";
 import { TermsPage } from "../pages/TermsPage";
 import { PrivacyPage } from "../pages/PrivacyPage";
 import { BlogPostPage } from "../pages/BlogPostPage";
@@ -41,7 +40,6 @@ export function AppRoutes() {
 
     return (
         <>
-        {isAuthenticated && <SystemNotificationToast />}
         <AnimatePresence mode="wait" initial={false}>
             <motion.div
                 key={transitionKey}
