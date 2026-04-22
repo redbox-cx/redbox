@@ -21,7 +21,7 @@ const servicesData = [
         title: "Redbox Toolset",
         icon: toolsetIcon,
         description: "A collection of privacy-focused tools: link shortener, secure file upload, and an encrypted bin. Designed to make sharing data safe and simple.",
-        path: "#"
+        path: "/about/toolset"
     }
 ];
 
