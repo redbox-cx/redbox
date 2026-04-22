@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { emitRateLimitNotification } from '../hooks/useRateLimitNotifications';
 
 const apiClient = axios.create({
     baseURL: import.meta.env.VITE_API_URL,
@@ -21,6 +22,14 @@ apiClient.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
+
+        if (error.response?.status === 429) {
+            const retryAfterHeader = error.response.headers?.['retry-after'];
+            const retryAfterSeconds = Number(retryAfterHeader ?? error.response.data?.retryAfterSeconds);
+            emitRateLimitNotification({
+                retryAfterSeconds: Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined,
+            });
+        }
 
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;

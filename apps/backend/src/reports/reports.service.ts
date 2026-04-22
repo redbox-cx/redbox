@@ -1,8 +1,21 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import * as bcrypt from 'bcryptjs';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  DeleteObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { Prisma, ReportedContentType } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
+import {
+  createRequiredS3Client,
+  requireBucket,
+} from 'src/common/storage/s3-client';
 import { PrismaService } from 'src/prisma.service';
 import { CreateBugReportDto } from './dto/create-bug-report.dto';
 import { CreateContentReportDto } from './dto/create-content-report.dto';
@@ -19,6 +32,7 @@ type ResolvedContentTarget = {
   reportedUserId: string;
   fileId: string | null;
   binId: string | null;
+  filePasswordHash: string | null;
 };
 
 type PreparedBugAttachment = {
@@ -32,25 +46,20 @@ type PreparedBugAttachment = {
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
   private readonly s3: S3Client;
-  private readonly bucket = process.env.S3_BUCKET_FILES || 'redbox-files';
+  private readonly bucket = requireBucket('S3_BUCKET_FILES');
 
   constructor(private readonly prismaService: PrismaService) {
-    this.s3 = new S3Client({
-      endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-      region: 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
-        secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
-      },
-      forcePathStyle: true,
-    });
+    this.s3 = createRequiredS3Client();
   }
 
   async createContentReport(dto: CreateContentReportDto) {
     const normalizedLink = dto.link.trim();
-    const extractedPassword = this.extractPasswordFromLink(normalizedLink);
-    const contentPassword = dto.contentPassword?.trim() || extractedPassword || null;
-    const target = await this.resolveContentTarget(normalizedLink, contentPassword);
+    const target = await this.resolveContentTarget(normalizedLink);
+    const contentPassword = this.resolveSubmittedContentPassword(
+      dto,
+      normalizedLink,
+    );
+    await this.assertFileReportPasswordIfRequired(target, contentPassword);
     const sanitizedLink = this.sanitizeContentLink(normalizedLink);
     const createData: Prisma.ContentReportUncheckedCreateInput = {
       contentType: target.contentType,
@@ -79,7 +88,10 @@ export class ReportsService {
     };
   }
 
-  async createBugReport(dto: CreateBugReportDto, attachments: Express.Multer.File[] = []) {
+  async createBugReport(
+    dto: CreateBugReportDto,
+    attachments: Express.Multer.File[] = [],
+  ) {
     const normalizedDescription = dto.description.trim();
     const contactEmail = dto.contactEmail?.trim().toLowerCase() || null;
     const uploadedStorageKeys: string[] = [];
@@ -135,7 +147,6 @@ export class ReportsService {
 
   private async resolveContentTarget(
     link: string,
-    contentPassword: string | null,
   ): Promise<ResolvedContentTarget> {
     const parsedLink = this.parseContentLink(link);
 
@@ -157,17 +168,12 @@ export class ReportsService {
         throw new NotFoundException('The reported upload could not be found');
       }
 
-      await this.assertProtectedContentPassword(
-        file.passwordHash,
-        contentPassword,
-        'upload',
-      );
-
       return {
         contentType: ReportedContentType.FILE,
         reportedUserId: file.userId,
         fileId: file.id,
         binId: null,
+        filePasswordHash: file.passwordHash,
       };
     }
 
@@ -180,7 +186,6 @@ export class ReportsService {
         id: true,
         userId: true,
         expiresAt: true,
-        passwordHash: true,
       },
     });
 
@@ -188,18 +193,39 @@ export class ReportsService {
       throw new NotFoundException('The reported bin could not be found');
     }
 
-    await this.assertProtectedContentPassword(
-      bin.passwordHash,
-      contentPassword,
-      'bin',
-    );
-
     return {
       contentType: ReportedContentType.BIN,
       reportedUserId: bin.userId,
       fileId: null,
       binId: bin.id,
+      filePasswordHash: null,
     };
+  }
+
+  private async assertFileReportPasswordIfRequired(
+    target: ResolvedContentTarget,
+    contentPassword: string | null,
+  ) {
+    if (
+      target.contentType !== ReportedContentType.FILE ||
+      !target.filePasswordHash
+    ) {
+      return;
+    }
+
+    if (!contentPassword) {
+      throw new BadRequestException(
+        'Content password is required to report a password-protected file',
+      );
+    }
+
+    const isMatch = await bcrypt.compare(
+      contentPassword,
+      target.filePasswordHash,
+    );
+    if (!isMatch) {
+      throw new BadRequestException('Content password is incorrect');
+    }
   }
 
   private parseContentLink(link: string): ParsedContentLink {
@@ -212,7 +238,9 @@ export class ReportsService {
     if (pathSegments[0] === 'd' && pathSegments[1]) {
       const token = url.searchParams.get('token');
       if (!token) {
-        throw new BadRequestException('A share token is required in the reported upload link');
+        throw new BadRequestException(
+          'A share token is required in the reported upload link',
+        );
       }
 
       return {
@@ -225,7 +253,9 @@ export class ReportsService {
     if (pathSegments[0] === 'b' && pathSegments[1]) {
       const token = url.searchParams.get('token');
       if (!token) {
-        throw new BadRequestException('A share token is required in the reported bin link');
+        throw new BadRequestException(
+          'A share token is required in the reported bin link',
+        );
       }
 
       return {
@@ -236,13 +266,16 @@ export class ReportsService {
     }
 
     const filesDownloadIndex = pathSegments.findIndex(
-      (segment, index) => segment === 'files' && pathSegments[index + 1] === 'download',
+      (segment, index) =>
+        segment === 'files' && pathSegments[index + 1] === 'download',
     );
 
     if (filesDownloadIndex >= 0 && pathSegments[filesDownloadIndex + 2]) {
       const token = url.searchParams.get('token');
       if (!token) {
-        throw new BadRequestException('A share token is required in the reported upload link');
+        throw new BadRequestException(
+          'A share token is required in the reported upload link',
+        );
       }
 
       return {
@@ -253,7 +286,11 @@ export class ReportsService {
     }
 
     const binsIndex = pathSegments.findIndex((segment) => segment === 'bins');
-    if (binsIndex >= 0 && pathSegments[binsIndex + 1] && pathSegments[binsIndex + 2]) {
+    if (
+      binsIndex >= 0 &&
+      pathSegments[binsIndex + 1] &&
+      pathSegments[binsIndex + 2]
+    ) {
       return {
         contentType: ReportedContentType.BIN,
         contentId: pathSegments[binsIndex + 1],
@@ -269,37 +306,14 @@ export class ReportsService {
       return new URL(link);
     } catch {
       try {
-        return new URL(link.startsWith('/') ? link : `/${link}`, 'https://redbox.local');
+        return new URL(
+          link.startsWith('/') ? link : `/${link}`,
+          'https://redbox.local',
+        );
       } catch {
         throw new BadRequestException('Invalid content link');
       }
     }
-  }
-
-  private async assertProtectedContentPassword(
-    passwordHash: string | null,
-    contentPassword: string | null,
-    contentTypeLabel: 'upload' | 'bin',
-  ) {
-    if (!passwordHash) {
-      return;
-    }
-
-    if (!contentPassword) {
-      throw new BadRequestException(
-        `This ${contentTypeLabel} is password protected, so the report must include the password`,
-      );
-    }
-
-    const isMatch = await bcrypt.compare(contentPassword, passwordHash);
-    if (!isMatch) {
-      throw new BadRequestException(`The provided password for this ${contentTypeLabel} is invalid`);
-    }
-  }
-
-  private extractPasswordFromLink(link: string) {
-    const url = this.toUrl(link);
-    return url.searchParams.get('password')?.trim() || null;
   }
 
   private sanitizeContentLink(link: string) {
@@ -314,6 +328,31 @@ export class ReportsService {
     return `${url.pathname}${url.search}${url.hash}`;
   }
 
+  private resolveSubmittedContentPassword(
+    dto: CreateContentReportDto,
+    link: string,
+  ) {
+    const submittedPassword = dto.contentPassword?.trim();
+    if (submittedPassword) {
+      return submittedPassword;
+    }
+
+    const passwordFromLink = this.toUrl(link)
+      .searchParams.get('password')
+      ?.trim();
+    if (!passwordFromLink) {
+      return null;
+    }
+
+    if (passwordFromLink.length > 100) {
+      throw new BadRequestException(
+        'Content password must have between 1 and 100 characters',
+      );
+    }
+
+    return passwordFromLink;
+  }
+
   private isAbsoluteUrl(link: string) {
     try {
       new URL(link);
@@ -326,14 +365,19 @@ export class ReportsService {
   private assertBugAttachmentsAreValid(attachments: Express.Multer.File[]) {
     for (const attachment of attachments) {
       if (!attachment.mimetype) {
-        throw new BadRequestException('Each attachment must include a valid MIME type');
+        throw new BadRequestException(
+          'Each attachment must include a valid MIME type',
+        );
       }
 
       const isAllowedType =
-        attachment.mimetype.startsWith('image/') || attachment.mimetype.startsWith('video/');
+        attachment.mimetype.startsWith('image/') ||
+        attachment.mimetype.startsWith('video/');
 
       if (!isAllowedType) {
-        throw new BadRequestException('Bug report attachments must be images or videos');
+        throw new BadRequestException(
+          'Bug report attachments must be images or videos',
+        );
       }
     }
   }
@@ -349,7 +393,9 @@ export class ReportsService {
             }),
           )
           .catch((error) => {
-            this.logger.warn(`Failed to delete bug report attachment ${key}: ${String(error)}`);
+            this.logger.warn(
+              `Failed to delete bug report attachment ${key}: ${String(error)}`,
+            );
           }),
       ),
     );

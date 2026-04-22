@@ -1,4 +1,4 @@
-import { Controller, Get, Req, Sse, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Req, Sse, UseGuards } from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
 import type { Request } from 'express';
 import { Observable } from 'rxjs';
@@ -28,6 +28,8 @@ export class NotificationsController {
   }
 
   @Sse('events')
+  @Header('Cache-Control', 'no-cache, no-transform')
+  @Header('X-Accel-Buffering', 'no')
   @UseGuards(NotificationsSseAuthGuard)
   streamNotifications(
     @GetUserId() userId: string,

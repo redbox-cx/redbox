@@ -5,9 +5,10 @@ interface Props {
     onClose: () => void;
     isPasswordProtected?: boolean;
     knownPassword?: string;
+    showPasswordField?: boolean;
 }
 
-export function ReportModal({ onClose, isPasswordProtected, knownPassword }: Props) {
+export function ReportModal({ onClose, isPasswordProtected, knownPassword, showPasswordField }: Props) {
     const [reason, setReason] = useState('');
     const [email, setEmail] = useState('');
     const [contentPassword, setContentPassword] = useState(knownPassword ?? '');
@@ -16,7 +17,8 @@ export function ReportModal({ onClose, isPasswordProtected, knownPassword }: Pro
     const [submitted, setSubmitted] = useState(false);
 
     const link = window.location.href;
-    const passwordLocked = isPasswordProtected && !!knownPassword;
+    const shouldShowPasswordField = isPasswordProtected || showPasswordField || !!knownPassword;
+    const passwordLocked = shouldShowPasswordField && !!knownPassword;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -30,8 +32,8 @@ export function ReportModal({ onClose, isPasswordProtected, knownPassword }: Pro
                 ...(contentPassword.trim() ? { contentPassword: contentPassword.trim() } : {}),
             });
             setSubmitted(true);
-        } catch (err: any) {
-            const msg = err.response?.data?.message;
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
             setError(Array.isArray(msg) ? msg[0] : msg || 'Failed to submit report.');
         } finally {
             setLoading(false);
@@ -82,17 +84,17 @@ export function ReportModal({ onClose, isPasswordProtected, knownPassword }: Pro
                                 required
                                 disabled={loading}
                             />
-                            {isPasswordProtected && (
+                            {shouldShowPasswordField && (
                                 <div className="shr-input-wrap">
                                     <i className={`bi bi-${passwordLocked ? 'lock-fill' : 'lock'} shr-input-icon`} />
                                     <input
                                         className="shr-input"
                                         type="password"
-                                        placeholder="Content password"
+                                        placeholder={isPasswordProtected ? 'Content password' : 'Content password (if protected)'}
                                         value={contentPassword}
                                         onChange={e => setContentPassword(e.target.value)}
                                         disabled={loading || passwordLocked}
-                                        required
+                                        required={isPasswordProtected}
                                         autoFocus={!passwordLocked}
                                     />
                                 </div>

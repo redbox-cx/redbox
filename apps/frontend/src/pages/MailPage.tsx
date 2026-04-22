@@ -5,10 +5,15 @@ import { useAuth } from '../context/AuthContext';
 import { MailService, type MailListItem, type MailDetail, type MailFolder, type MailAttachment } from '../services/MailService';
 import { MailListPanel } from '../components/mail/MailListPanel';
 import { MailDetailPanel } from '../components/mail/MailDetailPanel';
+import { MailDeleteModal } from '../components/mail/MailDeleteModal';
 import { useMailEvents } from '../hooks/useMailEvents';
 
 const PAGE_SIZE = 50;
 type SortKey = 'newest' | 'oldest' | 'unread' | 'read';
+type DeleteRequest = {
+    ids: string[];
+    subject?: string | null;
+};
 
 export function MailPage() {
     const { user } = useAuth();
@@ -29,6 +34,8 @@ export function MailPage() {
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [blockedSenders, setBlockedSenders] = useState<Set<string>>(new Set());
+    const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         document.documentElement.classList.add('dash-page', 'mail-page');
@@ -112,13 +119,36 @@ export function MailPage() {
 
     const handleFolderChange = (f: MailFolder) => { setFolder(f); setPage(0); setSelected(null); setCheckedIds(new Set()); };
 
-    const handleDelete = async (id: string) => {
+    const requestDelete = (id: string) => {
+        const mail = selected?.id === id ? selected : mails.find(m => m.id === id);
+        setDeleteRequest({ ids: [id], subject: mail?.subject });
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteRequest || deleting) return;
+
+        const ids = deleteRequest.ids;
+        const idSet = new Set(ids);
+        setDeleting(true);
         try {
-            await MailService.deleteMail(id);
-            setMails(prev => prev.filter(m => m.id !== id));
-            setTotalCount(prev => prev - 1);
-            if (selected?.id === id) setSelected(null);
-        } catch {}
+            if (ids.length === 1) {
+                await MailService.deleteMail(ids[0]);
+            } else {
+                await MailService.bulkDelete(ids);
+            }
+
+            setMails(prev => prev.filter(m => !idSet.has(m.id)));
+            setTotalCount(prev => Math.max(0, prev - ids.length));
+            setCheckedIds(prev => {
+                const next = new Set(prev);
+                ids.forEach(id => next.delete(id));
+                return next;
+            });
+            if (selected && idSet.has(selected.id)) setSelected(null);
+            setDeleteRequest(null);
+        } catch {} finally {
+            setDeleting(false);
+        }
     };
 
     const handleReadStatus = async (id: string, isRead: boolean) => {
@@ -150,13 +180,11 @@ export function MailPage() {
 
     const handleBulkDelete = async () => {
         const ids = [...checkedIds];
-        try {
-            await MailService.bulkDelete(ids);
-            setMails(prev => prev.filter(m => !checkedIds.has(m.id)));
-            setTotalCount(prev => prev - ids.length);
-            setCheckedIds(new Set());
-            if (selected && checkedIds.has(selected.id)) setSelected(null);
-        } catch {}
+        if (ids.length === 0) return;
+        const subject = ids.length === 1
+            ? mails.find(m => m.id === ids[0])?.subject
+            : undefined;
+        setDeleteRequest({ ids, subject });
     };
 
     const handleBulkReadStatus = async (isRead: boolean) => {
@@ -188,6 +216,15 @@ export function MailPage() {
 
     return (
         <div className="dash-layout">
+            {deleteRequest && (
+                <MailDeleteModal
+                    count={deleteRequest.ids.length}
+                    subject={deleteRequest.subject}
+                    loading={deleting}
+                    onConfirm={confirmDelete}
+                    onCancel={() => !deleting && setDeleteRequest(null)}
+                />
+            )}
             <div className="blob blob-1" />
             <div className="blob blob-2" />
             <TopBar />
@@ -232,7 +269,7 @@ export function MailPage() {
                     onMove={handleMove}
                     onBlockSender={handleBlockSender}
                     onUnblockSender={handleUnblockSender}
-                    onDelete={handleDelete}
+                    onDelete={requestDelete}
                     onDownloadAttachment={handleDownloadAttachment}
                 />
             </main>

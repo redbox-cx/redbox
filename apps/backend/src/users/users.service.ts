@@ -15,31 +15,22 @@ import { Redis } from 'ioredis';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { addDays } from 'date-fns';
+import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
   private readonly fileS3: S3Client;
   private readonly mailS3: S3Client;
-  private readonly filesBucket = process.env.S3_BUCKET_FILES || 'redbox-files';
-  private readonly mailsBucket = process.env.S3_BUCKET_MAILS || 'redbox-mails';
+  private readonly filesBucket = requireBucket('S3_BUCKET_FILES');
+  private readonly mailsBucket = requireBucket('S3_BUCKET_MAILS');
 
   constructor(
     private readonly prismaService: PrismaService,
     @InjectRedis() private readonly redis: Redis,
   ) {
-    const s3Config = {
-      endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-      region: 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
-        secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
-      },
-      forcePathStyle: true,
-    };
-
-    this.fileS3 = new S3Client(s3Config);
-    this.mailS3 = new S3Client(s3Config);
+    this.fileS3 = createRequiredS3Client();
+    this.mailS3 = createRequiredS3Client();
   }
 
   async getProfile(userId: string) {

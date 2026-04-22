@@ -2,7 +2,9 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { AuditActorType, Prisma } from '@prisma/client';
 import { Readable } from 'stream';
+import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 import { PrismaService } from 'src/prisma.service';
+import { decryptReportedContentPassword } from 'src/reports/report-content-password.util';
 import {
   ADMIN_REPORTS_HISTORY,
   type AdminBugReport,
@@ -16,7 +18,6 @@ import {
 } from '../dto/reports.dto';
 import { OffsetPaginationQueryDto } from '../dto/common.dto';
 import { AdminUsersService } from '../users/admin-users.service';
-import { decryptReportedContentPassword } from 'src/reports/report-content-password.util';
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -25,21 +26,13 @@ function clone<T>(value: T): T {
 @Injectable()
 export class AdminReportsService {
   private readonly s3: S3Client;
-  private readonly bugAttachmentsBucket = process.env.S3_BUCKET_FILES || 'redbox-files';
+  private readonly bugAttachmentsBucket = requireBucket('S3_BUCKET_FILES');
 
   constructor(
     private readonly prismaService: PrismaService,
     private readonly adminUsersService: AdminUsersService,
   ) {
-    this.s3 = new S3Client({
-      endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-      region: 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
-        secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
-      },
-      forcePathStyle: true,
-    });
+    this.s3 = createRequiredS3Client();
   }
 
   async getOpenReportsCount() {
@@ -125,8 +118,10 @@ export class AdminReportsService {
 
     return reports.map((report) => {
       const resource = report.file ?? report.bin;
-      const contentPassword = decryptReportedContentPassword(report.contentPasswordEncrypted);
-      const reviewLink = this.buildReviewLink(report.contentLink, contentPassword);
+      const reviewLink = this.buildReviewLink(report.contentLink);
+      const contentPassword = this.decryptContentPasswordForAdmin(
+        report.contentPasswordEncrypted,
+      );
 
       return {
         id: report.id,
@@ -144,8 +139,9 @@ export class AdminReportsService {
         fileCreationDate: resource?.createdAt?.toISOString() ?? report.createdAt.toISOString(),
         reason: report.reason,
         reporterEmail: report.reporterEmail,
-        contentPassword,
         hasContentPassword: Boolean(report.contentPasswordEncrypted),
+        contentPassword,
+        contentPasswordAvailable: Boolean(contentPassword),
         fileId: report.fileId ?? report.binId ?? undefined,
         contentType: report.contentType.toLowerCase(),
       };
@@ -616,13 +612,9 @@ export class AdminReportsService {
       : compactDescription;
   }
 
-  private buildReviewLink(link: string, contentPassword: string | null) {
+  private buildReviewLink(link: string) {
     const isAbsolute = this.isAbsoluteUrl(link);
     const url = this.toUrl(link);
-
-    if (contentPassword) {
-      url.searchParams.set('password', contentPassword);
-    }
 
     if (isAbsolute) {
       return url.toString();
@@ -633,6 +625,14 @@ export class AdminReportsService {
 
   private hasDecryptionKey(link: string) {
     return this.toUrl(link).hash.length > 1;
+  }
+
+  private decryptContentPasswordForAdmin(encryptedPassword: string | null) {
+    if (!encryptedPassword) {
+      return null;
+    }
+
+    return decryptReportedContentPassword(encryptedPassword);
   }
 
   private toUrl(link: string) {

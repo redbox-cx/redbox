@@ -9,6 +9,7 @@ import { publicEncrypt, privateDecrypt, randomBytes, createCipheriv, createDecip
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
 import { MailEventsService, type MailPushEventType } from './mail-events.service';
+import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 
 
 type MailboxUser = {
@@ -49,6 +50,7 @@ const ADMIN_INCOMING_MAIL_ALIASES = new Set([
   'team@redbox.cx',
   'moderation@redbox.cx',
   'about@redbox.cx',
+  'redbox@redbox.cx',
 ]);
 
 @Injectable()
@@ -57,22 +59,14 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly MAX_MAIL_QUOTA = 500 * 1024 * 1024; // 500MB
   private readonly s3: S3Client;
-  private readonly bucket = process.env.S3_BUCKET_MAILS || 'redbox-mails';
+  private readonly bucket = requireBucket('S3_BUCKET_MAILS');
 
   constructor(
     private prisma: PrismaService,
     @InjectRedis() private readonly redis: Redis,
     private readonly mailEventsService: MailEventsService,
   ){
-    this.s3 = new S3Client({
-      endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-      region: 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || 'admin_redbox',
-        secretAccessKey: process.env.S3_SECRET_KEY || 'SuperSecretMinioPassword123',
-      },
-      forcePathStyle: true,
-    });
+    this.s3 = createRequiredS3Client();
   }
 
   async createInternalInboxMail(

@@ -6,6 +6,7 @@ export function SettingsBlockedSendersCard() {
     const [blocked, setBlocked] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [unblocking, setUnblocking] = useState<string | null>(null);
+    const [confirmUnblock, setConfirmUnblock] = useState<string | null>(null);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -21,6 +22,7 @@ export function SettingsBlockedSendersCard() {
         try {
             await MailService.unblockSender(email);
             setBlocked(prev => prev.filter(e => e !== email));
+            setConfirmUnblock(null);
         } catch {
             setError('Failed to unblock. Please try again.');
         } finally {
@@ -29,6 +31,33 @@ export function SettingsBlockedSendersCard() {
     };
 
     return (
+        <>
+        {confirmUnblock && (
+            <div className="confirm-overlay" onClick={() => unblocking ? undefined : setConfirmUnblock(null)}>
+                <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+                    <i className="bi bi-person-check confirm-modal-icon" />
+                    <p className="confirm-modal-title">Unblock sender?</p>
+                    <p className="confirm-modal-desc">Are you sure you want to allow emails from "{confirmUnblock}" again?</p>
+                    <div className="confirm-modal-actions">
+                        <button
+                            className="confirm-btn-cancel"
+                            onClick={() => setConfirmUnblock(null)}
+                            disabled={unblocking === confirmUnblock}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="confirm-btn-delete"
+                            onClick={() => handleUnblock(confirmUnblock)}
+                            disabled={unblocking === confirmUnblock}
+                        >
+                            {unblocking === confirmUnblock ? 'Unblocking...' : 'Unblock'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         <div className="glass-panel settings-card">
             <h2 className="settings-section-title">
                 <i className="bi bi-slash-circle" /> Blocked Senders
@@ -49,7 +78,7 @@ export function SettingsBlockedSendersCard() {
                                 className="copy-icon-btn"
                                 title="Unblock"
                                 disabled={unblocking === email}
-                                onClick={() => handleUnblock(email)}
+                                onClick={() => setConfirmUnblock(email)}
                             >
                                 <i className={`bi bi-${unblocking === email ? 'hourglass-split' : 'person-check'}`} />
                             </button>
@@ -59,5 +88,6 @@ export function SettingsBlockedSendersCard() {
             )}
             {error && <p className="settings-error"><i className="bi bi-exclamation-triangle" /> {error}</p>}
         </div>
+        </>
     );
 }

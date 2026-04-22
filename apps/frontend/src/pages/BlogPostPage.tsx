@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { marked } from 'marked';
 import { motion } from 'motion/react';
 import { MainLayout } from '../components/MainLayout';
 import { Footer } from '../components/Footer';
 import { BlogService, type BlogPost } from '../services/BlogService';
+import { renderSafeMarkdown } from '../utils/safeMarkdown';
 
 function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -25,7 +25,7 @@ export function BlogPostPage() {
             .finally(() => setLoading(false));
     }, [id]);
 
-    const html = useMemo(() => post ? marked.parse(post.markdown) as string : '', [post]);
+    const html = useMemo(() => post ? renderSafeMarkdown(post.markdown) : '', [post]);
 
     return (
         <div className="page-wrapper">

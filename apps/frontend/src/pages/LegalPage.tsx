@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { marked } from 'marked';
+import { renderSafeMarkdown } from '../utils/safeMarkdown';
 import { MainLayout } from '../components/MainLayout';
 import { Footer } from '../components/Footer';
 
@@ -8,7 +8,7 @@ interface Props {
 }
 
 export function LegalPage({ content }: Props) {
-    const html = useMemo(() => marked.parse(content) as string, [content]);
+    const html = useMemo(() => renderSafeMarkdown(content), [content]);
 
     return (
         <div className="page-wrapper">

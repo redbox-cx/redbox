@@ -18,7 +18,24 @@ services:
     container_name: redbox-redis
     restart: always
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --requirepass
+      - "this-is-redis-pw"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a \"this-is-redis-pw\" ping | grep PONG"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # MinIO (S3 Object Storage)
   minio:
