@@ -133,8 +133,8 @@ export function DownloadCard({ fileId, token, keyHex }: Props) {
                 triggerDownload(blob, name);
             }
             setStage('preview');
-        } catch (err: any) {
-            setErrorMsg(err?.message ?? 'Download or decryption failed.');
+        } catch (err: unknown) {
+            setErrorMsg(err instanceof Error ? err.message : 'Download or decryption failed.');
             setStage('error');
         }
     };
@@ -150,6 +150,7 @@ export function DownloadCard({ fileId, token, keyHex }: Props) {
                 <ReportModal
                     onClose={() => setReportOpen(false)}
                     isPasswordProtected={isPasswordProtected}
+                    showPasswordField
                     knownPassword={isPasswordProtected && stage !== 'password' && stage !== 'idle' ? password : undefined}
                 />
             )}
