@@ -9,6 +9,7 @@ import { Blog } from "../pages/Blog";
 import { Contact } from "../pages/Contact";
 import { SecureSpherePage } from "../pages/SecureSpherePage";
 import { MailPublicPage } from "../pages/MailPage_Public";
+import { ToolsetPublicPage } from "../pages/ToolsetPublicPage";
 import { DashBoard } from "../pages/Dashboard";
 import { Upload } from "../pages/Upload";
 import { Download } from "../pages/Download";
@@ -26,7 +27,7 @@ import { TermsPage } from "../pages/TermsPage";
 import { PrivacyPage } from "../pages/PrivacyPage";
 import { BlogPostPage } from "../pages/BlogPostPage";
 
-const PUBLIC_PATHS = ["/", "/about", "/blog", "/contact", "/about/securesphere", "/about/mail", "/login", "/register", "/recover", "/terms", "/privacy"];
+const PUBLIC_PATHS = ["/", "/about", "/blog", "/contact", "/about/securesphere", "/about/mail", "/about/toolset", "/login", "/register", "/recover", "/terms", "/privacy"];
 const isPublicBlogPost = (path: string) => /^\/blog\/.+/.test(path);
 
 export function AppRoutes() {
@@ -58,6 +59,7 @@ export function AppRoutes() {
                     <Route path="/contact" element={<Contact />} />
                     <Route path="/about/securesphere" element={<SecureSpherePage />} />
                     <Route path="/about/mail" element={<MailPublicPage />} />
+                    <Route path="/about/toolset" element={<ToolsetPublicPage />} />
                     <Route path="/terms" element={<TermsPage />} />
                     <Route path="/privacy" element={<PrivacyPage />} />
                     <Route
