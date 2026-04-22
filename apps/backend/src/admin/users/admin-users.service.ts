@@ -15,7 +15,7 @@ import {
 } from '@prisma/client';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, AbortMultipartUploadCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { addDays } from 'date-fns';
 import { randomUUID } from 'crypto';
 import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
@@ -47,6 +47,16 @@ type UserContentDeletionCounts = {
   deletedMailsCount: number;
   deletedBinsCount: number;
   deletedLinksCount: number;
+};
+
+type UserRedisCleanupResult = {
+  deletedRedisKeysCount: number;
+  abortedActiveUploadsCount: number;
+};
+
+type UploadMeta = {
+  storageKey?: string;
+  s3UploadId?: string;
 };
 
 @Injectable()
@@ -548,11 +558,13 @@ export class AdminUsersService {
 
       return counts;
     });
+    const redisCleanup = await this.clearUserRedisData(userId);
 
     return {
       success: true,
       userId,
       ...deletedCounts,
+      ...redisCleanup,
     };
   }
 
@@ -765,7 +777,7 @@ export class AdminUsersService {
       });
     });
 
-    await this.redis.del(`masterkey:${userId}`);
+    await this.clearUserRedisData(userId);
   }
 
   private async buildUserContentDeletionSnapshot(userId: string): Promise<UserContentDeletionSnapshot> {
@@ -832,5 +844,96 @@ export class AdminUsersService {
             }),
         ),
     );
+  }
+
+  private async clearUserRedisData(userId: string): Promise<UserRedisCleanupResult> {
+    const activeUploadKey = this.getActiveUploadKey(userId);
+    const metaKeys = new Set<string>([
+      ...(await this.getActiveUploadMetaKeys(userId)),
+      ...(await this.scanRedisKeys(this.getUploadMetaPattern(userId))),
+    ]);
+
+    const abortedActiveUploadsCount = await this.abortRedisBackedUploads([...metaKeys]);
+    const redisKeys = [`masterkey:${userId}`, activeUploadKey, ...metaKeys];
+    const deletedRedisKeysCount = await this.deleteRedisKeys(redisKeys);
+
+    return {
+      deletedRedisKeysCount,
+      abortedActiveUploadsCount,
+    };
+  }
+
+  private async getActiveUploadMetaKeys(userId: string) {
+    const uploadIds = await this.redis.smembers(this.getActiveUploadKey(userId));
+    return uploadIds.map((uploadId) => this.getUploadMetaKey(userId, uploadId));
+  }
+
+  private async abortRedisBackedUploads(metaKeys: string[]) {
+    if (metaKeys.length === 0) {
+      return 0;
+    }
+
+    const metaValues = await this.redis.mget(...metaKeys);
+    let abortedCount = 0;
+
+    await Promise.all(
+      metaValues.map(async (metaStr, index) => {
+        if (!metaStr) {
+          return;
+        }
+
+        try {
+          const meta = JSON.parse(metaStr) as UploadMeta;
+          if (!meta.storageKey || !meta.s3UploadId) {
+            return;
+          }
+
+          await this.fileS3.send(new AbortMultipartUploadCommand({
+            Bucket: this.filesBucket,
+            Key: meta.storageKey,
+            UploadId: meta.s3UploadId,
+          }));
+          abortedCount += 1;
+        } catch (error) {
+          this.logger.warn(`Failed to abort Redis-backed upload ${metaKeys[index]}: ${String(error)}`);
+        }
+      }),
+    );
+
+    return abortedCount;
+  }
+
+  private async scanRedisKeys(pattern: string) {
+    const keys: string[] = [];
+    let cursor = '0';
+
+    do {
+      const [nextCursor, batch] = await this.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = nextCursor;
+      keys.push(...batch);
+    } while (cursor !== '0');
+
+    return keys;
+  }
+
+  private async deleteRedisKeys(keys: string[]) {
+    const uniqueKeys = [...new Set(keys)];
+    if (uniqueKeys.length === 0) {
+      return 0;
+    }
+
+    return this.redis.del(...uniqueKeys);
+  }
+
+  private getActiveUploadKey(userId: string) {
+    return `upload:active:${userId}`;
+  }
+
+  private getUploadMetaKey(userId: string, uploadId: string) {
+    return `upload:meta:${userId}:${uploadId}`;
+  }
+
+  private getUploadMetaPattern(userId: string) {
+    return `${this.getUploadMetaKey(userId, '')}*`;
   }
 }

@@ -15,11 +15,28 @@ import {
 import { Readable } from 'stream';
 import { memoryStorage } from 'multer';
 import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
-import { RateLimitExceededException } from 'src/common/rate-limit/rate-limit.exception';
 import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 
 const MAX_ACTIVE_UPLOADS_PER_USER = 3;
 const UPLOAD_META_TTL_SECONDS = 86400;
+
+type UploadMeta = {
+    totalChunks: number;
+    nextExpectedChunk: number;
+    fileSize: number;
+    passwordHash: string | null;
+    expiresIn: string;
+    storageKey: string;
+    s3UploadId?: string;
+    parts: Array<{ PartNumber: number; ETag?: string }>;
+    createdAt?: number;
+};
+
+type ActiveUploadCandidate = {
+    uploadId: string;
+    meta: UploadMeta;
+    createdAt: number;
+};
 
 @Injectable()
 export class FilesService {
@@ -45,6 +62,8 @@ export class FilesService {
     }
 
     async initializeUpload(userId: string, fileSize: number, totalChunks: number, password?: string, expiresIn?: string) {
+        await this.getMasterKeyForUser(userId);
+
         if (fileSize > this.MAX_QUOTA) throw new BadRequestException('File too large');
 
         await this.prisma.$transaction(async (tx) => {
@@ -63,11 +82,10 @@ export class FilesService {
         const passwordHash = password ? await bcrypt.hash(password, 12) : null;
         let s3UploadId: string | undefined;
         let uploadReserved = false;
+        let uploadMetaCreated = false;
+        const metaKey = this.getUploadMetaKey(userId, uploadId);
 
         try {
-            await this.reserveActiveUpload(userId, uploadId);
-            uploadReserved = true;
-
             const s3Init = await this.s3.send(new CreateMultipartUploadCommand({
                 Bucket: this.bucket,
                 Key: storageKey,
@@ -75,7 +93,7 @@ export class FilesService {
             s3UploadId = s3Init.UploadId;
 
             await this.redis.set(
-                `upload:meta:${userId}:${uploadId}`,
+                metaKey,
                 JSON.stringify({
                     totalChunks,
                     nextExpectedChunk: 0,
@@ -84,10 +102,15 @@ export class FilesService {
                     expiresIn: expiresIn ?? '30d',
                     storageKey,
                     s3UploadId,
-                    parts: []
-                }),
+                    parts: [],
+                    createdAt: Date.now(),
+                } satisfies UploadMeta),
                 'EX', UPLOAD_META_TTL_SECONDS
             );
+            uploadMetaCreated = true;
+
+            await this.reserveActiveUpload(userId, uploadId);
+            uploadReserved = true;
 
             return { uploadId };
         } catch (error) {
@@ -97,6 +120,10 @@ export class FilesService {
                     Key: storageKey,
                     UploadId: s3UploadId,
                 })).catch(() => {});
+            }
+
+            if (uploadMetaCreated) {
+                await this.redis.del(metaKey);
             }
 
             if (uploadReserved) {
@@ -110,7 +137,7 @@ export class FilesService {
     async handleChunk(userId: string, uploadId: string, file: Express.Multer.File, chunkIndex: number) {
         if (!file || !file.buffer) throw new BadRequestException('File data is missing');
 
-        const metaKey = `upload:meta:${userId}:${uploadId}`;
+        const metaKey = this.getUploadMetaKey(userId, uploadId);
         const metaStr = await this.redis.get(metaKey);
 
         if (!metaStr) throw new BadRequestException('Invalid or expired Upload ID');
@@ -144,16 +171,14 @@ export class FilesService {
     }
 
     async finalizeUpload(userId: string, uploadId: string, fileName: string, mimetype: string, fileKeyFromFrontend: string) {
-        const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
-        if (!masterKeyHex) throw new UnauthorizedException('Session expired');
-        const masterKey = Buffer.from(masterKeyHex, 'hex');
+        const masterKey = await this.getMasterKeyForUser(userId);
 
         const fileKeyIv = randomBytes(16);
         const cipher = createCipheriv('aes-256-cbc', masterKey, fileKeyIv);
         let encryptedFileKey = cipher.update(fileKeyFromFrontend, 'utf8', 'hex');
         encryptedFileKey += cipher.final('hex');
 
-        const metaStr = await this.redis.get(`upload:meta:${userId}:${uploadId}`);
+        const metaStr = await this.redis.get(this.getUploadMetaKey(userId, uploadId));
         if (!metaStr) throw new BadRequestException('Metadata expired');
         const meta = JSON.parse(metaStr);
 
@@ -254,9 +279,7 @@ export class FilesService {
     }
 
     async getUserFilesWithQuota(userId: string) {
-        const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
-        if (!masterKeyHex) throw new UnauthorizedException('Session expired');
-        const masterKey = Buffer.from(masterKeyHex, 'hex');
+        const masterKey = await this.getMasterKeyForUser(userId);
 
         const files = await this.prisma.file.findMany({
             where: { userId },
@@ -322,28 +345,11 @@ export class FilesService {
     }
 
     private async reserveActiveUpload(userId: string, uploadId: string) {
-        const result = await this.redis.eval(
-            `
-            local activeCount = redis.call('SCARD', KEYS[1])
-            if activeCount >= tonumber(ARGV[2]) then
-                return 0
-            end
-            redis.call('SADD', KEYS[1], ARGV[1])
-            redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
-            return 1
-            `,
-            1,
-            this.getActiveUploadKey(userId),
-            uploadId,
-            MAX_ACTIVE_UPLOADS_PER_USER,
-            UPLOAD_META_TTL_SECONDS,
-        );
+        await this.makeRoomForActiveUpload(userId);
 
-        if (Number(result) !== 1) {
-            throw new RateLimitExceededException(
-                `You can't have more than ${MAX_ACTIVE_UPLOADS_PER_USER} active uploads`,
-            );
-        }
+        const activeKey = this.getActiveUploadKey(userId);
+        await this.redis.sadd(activeKey, uploadId);
+        await this.redis.expire(activeKey, UPLOAD_META_TTL_SECONDS);
     }
 
     private async releaseActiveUpload(userId: string, uploadId: string) {
@@ -352,6 +358,87 @@ export class FilesService {
 
     private getActiveUploadKey(userId: string) {
         return `upload:active:${userId}`;
+    }
+
+    private getUploadMetaKey(userId: string, uploadId: string) {
+        return `upload:meta:${userId}:${uploadId}`;
+    }
+
+    private async makeRoomForActiveUpload(userId: string) {
+        const activeKey = this.getActiveUploadKey(userId);
+        const uploadIds = await this.redis.smembers(activeKey);
+
+        if (uploadIds.length < MAX_ACTIVE_UPLOADS_PER_USER) {
+            return;
+        }
+
+        const metaKeys = uploadIds.map((uploadId) => this.getUploadMetaKey(userId, uploadId));
+        const metaValues = await this.redis.mget(...metaKeys);
+        const candidates: ActiveUploadCandidate[] = [];
+        const staleUploadIds: string[] = [];
+        const staleMetaKeys: string[] = [];
+
+        uploadIds.forEach((uploadId, index) => {
+            const metaStr = metaValues[index];
+            if (!metaStr) {
+                staleUploadIds.push(uploadId);
+                return;
+            }
+
+            try {
+                const meta = JSON.parse(metaStr) as UploadMeta;
+                candidates.push({
+                    uploadId,
+                    meta,
+                    createdAt: Number(meta.createdAt ?? 0),
+                });
+            } catch {
+                staleUploadIds.push(uploadId);
+                staleMetaKeys.push(metaKeys[index]);
+            }
+        });
+
+        if (staleUploadIds.length > 0) {
+            await this.redis.srem(activeKey, ...staleUploadIds);
+        }
+
+        if (staleMetaKeys.length > 0) {
+            await this.redis.del(...staleMetaKeys);
+        }
+
+        const uploadsToRemove = candidates.length - MAX_ACTIVE_UPLOADS_PER_USER + 1;
+        if (uploadsToRemove <= 0) {
+            return;
+        }
+
+        candidates.sort((a, b) => a.createdAt - b.createdAt);
+
+        for (const candidate of candidates.slice(0, uploadsToRemove)) {
+            await this.abortActiveUpload(userId, candidate);
+        }
+    }
+
+    private async abortActiveUpload(userId: string, candidate: ActiveUploadCandidate) {
+        if (candidate.meta.s3UploadId && candidate.meta.storageKey) {
+            await this.s3.send(new AbortMultipartUploadCommand({
+                Bucket: this.bucket,
+                Key: candidate.meta.storageKey,
+                UploadId: candidate.meta.s3UploadId,
+            })).catch((err) => {
+                this.logger.warn(`Failed to abort replaced upload ${candidate.uploadId}: ${err.message}`);
+            });
+        }
+
+        await this.redis.del(this.getUploadMetaKey(userId, candidate.uploadId));
+        await this.releaseActiveUpload(userId, candidate.uploadId);
+        this.logger.log(`Replaced active upload ${candidate.uploadId} for user ${userId}`);
+    }
+
+    private async getMasterKeyForUser(userId: string) {
+        const masterKeyHex = await this.redis.get(`masterkey:${userId}`);
+        if (!masterKeyHex) throw new UnauthorizedException('Session expired');
+
+        return Buffer.from(masterKeyHex, 'hex');
     }
 }
 

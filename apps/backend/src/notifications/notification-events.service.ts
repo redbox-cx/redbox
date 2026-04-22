@@ -102,9 +102,12 @@ export class NotificationEventsService implements OnModuleInit, OnModuleDestroy 
       timestamp: new Date().toISOString(),
       notification,
     };
+    const serializedPayload = JSON.stringify(payload);
+
+    this.deliverRedisEvent(serializedPayload);
 
     try {
-      await this.redis.publish(SYSTEM_NOTIFICATIONS_CHANNEL, JSON.stringify(payload));
+      await this.redis.publish(SYSTEM_NOTIFICATIONS_CHANNEL, serializedPayload);
     } catch (error) {
       this.logger.error('Failed to publish system notification SSE event', error);
     }
