@@ -8,9 +8,10 @@ interface ContactMethod {
 
 interface Props {
     onBugReport: () => void;
+    onLawEnforcement: () => void;
 }
 
-export function ContactMethods({ onBugReport }: Props) {
+export function ContactMethods({ onBugReport, onLawEnforcement }: Props) {
     const contactData: ContactMethod[] = [
         {
             name: "Email",
@@ -27,8 +28,8 @@ export function ContactMethods({ onBugReport }: Props) {
         {
             name: "Law Enforcement",
             value: "Law Enforcement Request Portal",
-            link: "#",
-            icon: "bi bi-arrow-right",
+            icon: "bi bi-shield-lock-fill",
+            onClick: onLawEnforcement,
         },
     ];
 

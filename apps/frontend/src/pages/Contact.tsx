@@ -3,9 +3,11 @@ import { MainLayout } from "../components/MainLayout";
 import { Footer } from "../components/Footer";
 import { ContactMethods } from "../components/ContactMethods";
 import { BugReportModal } from "../components/BugReportModal";
+import { LawEnforcementModal } from "../components/LawEnforcementModal";
 
 export function Contact() {
     const [showBugModal, setShowBugModal] = useState(false);
+    const [showLEModal, setShowLEModal] = useState(false);
 
     useEffect(() => {
         const sections = document.querySelectorAll('.contact-intro, .contact-content');
@@ -38,13 +40,14 @@ export function Contact() {
                     </section>
 
                     <section className="contact-content">
-                        <ContactMethods onBugReport={() => setShowBugModal(true)} />
+                        <ContactMethods onBugReport={() => setShowBugModal(true)} onLawEnforcement={() => setShowLEModal(true)} />
                     </section>
                 </div>
             </MainLayout>
             <Footer />
 
             {showBugModal && <BugReportModal onClose={() => setShowBugModal(false)} />}
+            {showLEModal && <LawEnforcementModal onClose={() => setShowLEModal(false)} />}
         </div>
     );
 }
