@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { MailListItem } from "../../services/MailService";
+import { formatBytes } from "../mail/mailUtils";
 
 interface Props {
     title: string;
     icon: string;
     count: number;
-    storageMb?: number;
+    storageUsedBytes?: number;
+    storageLimitBytes?: number | null;
     mails?: MailListItem[];
 }
 
@@ -28,7 +30,7 @@ function formatShort(iso: string): string {
     return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
 }
 
-export function NotificationWidget({ title, icon, count, storageMb, mails }: Props) {
+export function NotificationWidget({ title, icon, count, storageUsedBytes, storageLimitBytes, mails }: Props) {
     const [isSlidDown, setIsSlidDown] = useState(false);
     const hasMails = mails && mails.length > 0;
     const navigate = useNavigate();
@@ -40,8 +42,10 @@ export function NotificationWidget({ title, icon, count, storageMb, mails }: Pro
                 <div className="widget-header">
                     <h3>{title === "Mail Notifications" ? "Inbox" : "Notifications"}</h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {storageMb !== undefined && (
-                            <span className="notif-storage-label">{storageMb} MB / 500 MB</span>
+                        {storageUsedBytes !== undefined && (
+                            <span className="notif-storage-label">
+                                {formatBytes(storageUsedBytes)} / {storageLimitBytes ? formatBytes(storageLimitBytes) : '...'}
+                            </span>
                         )}
                         <span className={`red-badge ${count === 0 ? 'zero' : ''}`}>
                             {mails !== undefined && count >= 100 ? '99+' : count}

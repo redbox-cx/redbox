@@ -30,7 +30,8 @@ export function MailPage() {
     const [loadingDetail, setLoadingDetail] = useState(false);
     const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
     const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
-    const [mailStorageMb, setMailStorageMb] = useState(0);
+    const [mailStorageUsedBytes, setMailStorageUsedBytes] = useState(0);
+    const [mailQuotaLimitBytes, setMailQuotaLimitBytes] = useState<number | null>(null);
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [blockedSenders, setBlockedSenders] = useState<Set<string>>(new Set());
@@ -53,7 +54,8 @@ export function MailPage() {
             const res = await MailService.getAll(PAGE_SIZE, p * PAGE_SIZE, s, f, q);
             setMails(res.mails);
             setTotalCount(res.totalCount);
-            setMailStorageMb(Math.round(res.totalUsed / (1024 * 1024)));
+            setMailStorageUsedBytes(res.totalUsed);
+            setMailQuotaLimitBytes(res.quotaLimit);
         } catch {}
         finally { setLoading(false); }
     };
@@ -240,7 +242,8 @@ export function MailPage() {
                     checkedIds={checkedIds}
                     selectedId={selected?.id ?? null}
                     mobileView={mobileView}
-                    mailStorageMb={mailStorageMb}
+                    mailStorageUsedBytes={mailStorageUsedBytes}
+                    mailQuotaLimitBytes={mailQuotaLimitBytes}
                     blockedSenders={blockedSenders}
                     user={user}
                     userEmail={userEmail}

@@ -12,6 +12,7 @@ import { MailEventsService, type MailPushEventType } from './mail-events.service
 import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 import {
   extractMailAddress,
+  getAdminForwardUsername,
   resolveIncomingMailboxUsername,
   resolveIncomingRecipientAddress,
 } from 'src/common/mail/admin-mail-aliases';
@@ -46,11 +47,13 @@ type SharedInternalAttachmentInput = {
   size: number;
 };
 
+const DEFAULT_MAIL_QUOTA_BYTES = 500 * 1024 * 1024; // 500MB
+const ADMIN_FORWARD_MAIL_QUOTA_BYTES = 50 * 1024 * 1024 * 1024; // 50GB
+
 @Injectable()
 export class MailService {
 
   private readonly logger = new Logger(MailService.name);
-  private readonly MAX_MAIL_QUOTA = 500 * 1024 * 1024; // 500MB
   private readonly s3: S3Client;
   private readonly bucket = requireBucket('S3_BUCKET_MAILS');
 
@@ -168,6 +171,16 @@ export class MailService {
     );
   }
 
+  private getMailQuotaLimitForUsername(username: string) {
+    const adminForwardUsername = getAdminForwardUsername();
+
+    if (adminForwardUsername && username === adminForwardUsername) {
+      return ADMIN_FORWARD_MAIL_QUOTA_BYTES;
+    }
+
+    return DEFAULT_MAIL_QUOTA_BYTES;
+  }
+
   async deleteMailRecordById(
     mailId: string,
     options: {
@@ -259,7 +272,7 @@ export class MailService {
     }
 
     try {
-      const [rawMails, totalCount, totalUsed] = await Promise.all([
+      const [rawMails, totalCount, totalUsed, user] = await Promise.all([
         this.prisma.mail.findMany({
           where: whereCondition,
           orderBy,
@@ -293,7 +306,15 @@ export class MailService {
         }),
         this.prisma.mail.count({ where: whereCondition }),
         this.getUserMailStorageUsed(userId),
+        this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { username: true },
+        }),
       ]);
+
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
 
       const mails = rawMails.map(mail => {
         const { _count, internalMailDelivery, ...rest } = mail;
@@ -314,9 +335,13 @@ export class MailService {
         folder,
         search,
         totalUsed,
-        quotaLimit: this.MAX_MAIL_QUOTA,
+        quotaLimit: this.getMailQuotaLimitForUsername(user.username),
       };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
       this.logger.error(`Error fetching mails for user ${userId}:`, error);
       throw new InternalServerErrorException('Could not fetch emails');
     }
@@ -734,7 +759,8 @@ export class MailService {
       contentSize
     );
     const currentUsage = await this.getUserMailStorageUsed(user.id);
-    if (currentUsage + incomingMailSize > this.MAX_MAIL_QUOTA) {
+    const quotaLimit = this.getMailQuotaLimitForUsername(user.username);
+    if (currentUsage + incomingMailSize > quotaLimit) {
       this.logger.warn(
         `Ignored email for user '${username}' because mailbox quota would be exceeded`,
       );

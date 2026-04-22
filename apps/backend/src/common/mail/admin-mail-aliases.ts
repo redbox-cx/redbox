@@ -1,6 +1,8 @@
 import { optionalEnv } from '../config/env';
 
+const ADMIN_FORWARD_USERNAME_ENV = 'MAIL_ADMIN_FORWARD_USERNAME';
 const ADMIN_FORWARD_ALIASES_ENV = 'MAIL_ADMIN_FORWARD_ALIASES';
+const USERNAME_PATTERN = /^[a-z0-9_-]{3,50}$/;
 
 export function extractMailAddress(value: unknown) {
   if (typeof value !== 'string') {
@@ -25,6 +27,21 @@ export function getAdminForwardAliases() {
   );
 }
 
+export function getAdminForwardUsername() {
+  const username = optionalEnv(ADMIN_FORWARD_USERNAME_ENV);
+  if (!username) {
+    return undefined;
+  }
+
+  if (!USERNAME_PATTERN.test(username)) {
+    throw new Error(
+      `${ADMIN_FORWARD_USERNAME_ENV} must be a lowercase username with 3-50 letters, numbers, underscores or hyphens`,
+    );
+  }
+
+  return username;
+}
+
 function isFullEmailAddress(value: string) {
   return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value);
 }
@@ -39,8 +56,12 @@ export function resolveIncomingRecipientAddress(...rawRecipients: unknown[]) {
   }
 
   const adminAliases = getAdminForwardAliases();
+  const adminForwardUsername = getAdminForwardUsername();
+  const primaryAdminAddress = adminForwardUsername
+    ? `${adminForwardUsername}@redbox.cx`
+    : undefined;
   const forwardedAdminAlias = recipients.find(
-    (recipient) => recipient !== 'admin@redbox.cx' && adminAliases.has(recipient),
+    (recipient) => recipient !== primaryAdminAddress && adminAliases.has(recipient),
   );
 
   return (
@@ -57,8 +78,9 @@ export function resolveIncomingMailboxUsername(rawRecipient: unknown) {
     return 'unknown';
   }
 
-  if (getAdminForwardAliases().has(cleanEmail)) {
-    return 'admin';
+  const adminForwardUsername = getAdminForwardUsername();
+  if (adminForwardUsername && getAdminForwardAliases().has(cleanEmail)) {
+    return adminForwardUsername;
   }
 
   return cleanEmail.split('@')[0]?.trim() || 'unknown';

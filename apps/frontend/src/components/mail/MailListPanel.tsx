@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getAvatarSrc } from '../../config/avatars';
 import type { MailListItem, MailFolder } from '../../services/MailService';
 import { MailPageButtons } from './MailPageButtons';
-import { senderColor, senderInitial, parseSender, formatShort } from './mailUtils';
+import { senderColor, senderInitial, parseSender, formatShort, formatBytes } from './mailUtils';
 
 type SortKey = 'newest' | 'oldest' | 'unread' | 'read';
 const SORT_LABELS: Record<SortKey, string> = {
@@ -24,7 +24,8 @@ interface Props {
     checkedIds: Set<string>;
     selectedId: string | null;
     mobileView: 'list' | 'detail';
-    mailStorageMb: number;
+    mailStorageUsedBytes: number;
+    mailQuotaLimitBytes: number | null;
     blockedSenders: Set<string>;
     user: { username?: string; avatar?: string } | null;
     userEmail: string;
@@ -44,7 +45,7 @@ interface Props {
 
 export function MailListPanel({
     mails, loading, folder, search, sort, page, totalPages,
-    checkedIds, selectedId, mobileView, mailStorageMb, blockedSenders, user, userEmail,
+    checkedIds, selectedId, mobileView, mailStorageUsedBytes, mailQuotaLimitBytes, blockedSenders, user, userEmail,
     isAllChecked, anyChecked,
     onFolderChange, onSearchChange, onSortChange, onToggleCheck, onToggleAll,
     onSelect, onChangePage, onBulkDelete, onBulkReadStatus, onBulkMove,
@@ -57,6 +58,9 @@ export function MailListPanel({
     const [copiedEmail, setCopiedEmail] = useState(false);
     const [gearRot, setGearRot] = useState(0);
     const sortRef = useRef<HTMLDivElement>(null);
+    const quotaPercent = mailQuotaLimitBytes && mailQuotaLimitBytes > 0
+        ? Math.min((mailStorageUsedBytes / mailQuotaLimitBytes) * 100, 100)
+        : 0;
 
     const copyEmail = () => {
         navigator.clipboard.writeText(userEmail);
@@ -209,11 +213,11 @@ export function MailListPanel({
 
                     <div className="upload-quota">
                         <div className="upload-quota-labels">
-                            <span>{mailStorageMb} MB used</span>
-                            <span>500 MB</span>
+                            <span>{formatBytes(mailStorageUsedBytes)} used</span>
+                            <span>{mailQuotaLimitBytes ? formatBytes(mailQuotaLimitBytes) : '...'}</span>
                         </div>
                         <div className="upload-quota-track">
-                            <div className="upload-quota-fill" style={{ width: `${Math.min((mailStorageMb / 500) * 100, 100)}%` }} />
+                            <div className="upload-quota-fill" style={{ width: `${quotaPercent}%` }} />
                         </div>
                     </div>
 
