@@ -72,7 +72,7 @@ export function Blog() {
                                         <h2 className="blog-card-title">{post.title}</h2>
                                         <p className="blog-card-subtitle">{post.subtitle}</p>
                                         <div className="blog-card-meta">
-                                            <span className="blog-card-author">{post.author.name}</span>
+                                            <span className="blog-card-author">Author: {post.author.name}</span>
                                             <span className="blog-card-date">{formatDate(post.publishedAt)}</span>
                                         </div>
                                     </Link>
