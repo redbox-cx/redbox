@@ -4,7 +4,6 @@ import logoRed from "@/assets/images/logo_red.png"
 import securesphereIcon from "@/assets/svg/securesphere-logo.svg"
 import mailIcon from "@/assets/svg/mail-logo.svg"
 import toolsetIcon from "@/assets/svg/toolset-logo.svg"
-import "@/styles/global.css"
 
 const menuItems = [
   {
