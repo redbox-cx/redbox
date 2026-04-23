@@ -2864,12 +2864,10 @@ html.dash-page {
      font-size: clamp(0.65rem, 1.2dvh, 0.75rem);
      font-weight: 700;
      margin-left: 20px;
-     transform: translateY(8px);
+     margin-bottom: -8px;
      display: flex;
      align-items: center;
      gap: 8px;
-     position: relative;
-     z-index: 0;
 }
 
  .glass-panel {
@@ -2878,8 +2876,6 @@ html.dash-page {
      -webkit-backdrop-filter: blur(20px);
      border: 1px solid var(--glass-border);
      border-radius: clamp(18px, 2.5dvh, 28px);
-     position: relative;
-     z-index: 1;
      padding: clamp(12px, 1.8dvh, 20px);
      box-shadow: 0 10px 40px rgba(31, 38, 135, 0.05);
      display: flex;
