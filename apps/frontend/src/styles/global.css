@@ -4407,12 +4407,12 @@ html.dash-page {
     align-items: center;
     gap: 8px;
     padding: 10px 14px;
-    border: 1px dashed rgba(0,0,0,0.2);
+    border: 1.5px dashed rgba(0,0,0,0.4);
     border-radius: 8px;
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 600;
-    color: var(--color-inactive);
+    color: #444;
     transition: border-color 0.15s, color 0.15s;
     user-select: none;
 }
@@ -4437,7 +4437,7 @@ html.dash-page {
     gap: 8px;
     padding: 7px 10px;
     background: rgba(0,0,0,0.03);
-    border: 1px solid rgba(0,0,0,0.08);
+    border: 1.5px solid rgba(0,0,0,0.35);
     border-radius: 8px;
     font-size: 0.8rem;
 }
@@ -5051,7 +5051,7 @@ html.dash-page {
     align-items: center;
     gap: 10px;
     background: rgba(255,255,255,0.7);
-    border: 1.5px solid rgba(0,0,0,0.1);
+    border: 1.5px solid rgba(0,0,0,0.35);
     border-radius: 12px;
     padding: 0 14px;
     transition: border-color 0.2s;
