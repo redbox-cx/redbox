@@ -2864,7 +2864,6 @@ html.dash-page {
      font-size: clamp(0.65rem, 1.2dvh, 0.75rem);
      font-weight: 700;
      margin-left: 20px;
-     margin-bottom: -8px;
      display: flex;
      align-items: center;
      gap: 8px;
