@@ -17,8 +17,8 @@ export function Footer() {
     };
 
     const cryptoAddrs = [
-        { label: "BTC", full: "cryptoadreessbitcoin1" },
-        { label: "XMR", full: "cryptoadreessmonero1" }
+        { label: "BTC", full: "bc1qkyr4cxt6zqm9n79qdvfe4uxv50epn98m7258a7" },
+        { label: "XMR", full: "comming-soon" }
     ];
 
     return (
