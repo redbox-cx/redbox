@@ -2859,7 +2859,7 @@ html.dash-page {
  .widget-tab {
      background: #e9ecef;
      width: max-content;
-     padding: clamp(4px, 0.7dvh, 6px) 18px clamp(10px, 1.5dvh, 15px);
+     padding: clamp(3px, 0.5dvh, 5px) 18px clamp(6px, 1dvh, 10px);
      border-radius: 12px 12px 0 0;
      font-size: clamp(0.65rem, 1.2dvh, 0.75rem);
      font-weight: 700;
