@@ -57,8 +57,24 @@ export function MailDetailPanel({
         const iframe = iframeRef.current;
         if (!iframe) return;
         try {
-            const body = iframe.contentDocument?.body;
+            const doc = iframe.contentDocument;
+            const body = doc?.body;
             if (body) iframe.style.height = `${body.scrollHeight + 32}px`;
+
+            doc?.querySelectorAll('a[href]').forEach(link => {
+                const anchor = link as HTMLAnchorElement;
+                anchor.target = '_blank';
+                anchor.rel = 'noopener noreferrer';
+            });
+
+            doc?.addEventListener('click', event => {
+                const target = event.target as Element | null;
+                const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+                if (!anchor?.href) return;
+
+                event.preventDefault();
+                window.open(anchor.href, '_blank', 'noopener,noreferrer');
+            });
         } catch {}
     };
 
@@ -185,8 +201,8 @@ export function MailDetailPanel({
                             <iframe
                                 ref={iframeRef}
                                 className="mc-iframe"
-                                srcDoc={`<style>body{font-family:'Montserrat',sans-serif;margin:0;padding:0;}</style>${selected.content}`}
-                                sandbox="allow-same-origin"
+                                srcDoc={`<base target="_blank"><style>body{font-family:'Montserrat',sans-serif;margin:0;padding:0;}</style>${selected.content}`}
+                                sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                                 onLoad={handleIframeLoad}
                                 title="Mail content"
                             />

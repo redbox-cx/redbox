@@ -165,9 +165,9 @@ export function LoginForm() {
             <div className="login-footer">
                 <p>Don't have an account? <a href="/register">Register</a></p>
                 <div className="legal-links">
-                    <a href="#">Terms of Service</a>
+                    <a href="https://redbox.cx/terms">Terms of Service</a>
                     <span className="separator">|</span>
-                    <a href="#">Privacy Policy</a>
+                    <a href="https://redbox.cx/privacy">Privacy Policy</a>
                 </div>
             </div>
         </form>

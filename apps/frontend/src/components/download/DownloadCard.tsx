@@ -11,6 +11,8 @@ import { DownloadError } from './DownloadError';
 
 type Stage = 'idle' | 'password' | 'downloading' | 'decrypting' | 'preview' | 'error';
 
+const waitForNextPaint = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
 interface Props {
     fileId: string;
     token: string;
@@ -21,7 +23,7 @@ export function DownloadCard({ fileId, token, keyHex }: Props) {
     const [stage, setStage] = useState<Stage>('idle');
     const [password, setPassword] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
-    const [progress, setProgress] = useState(0);
+    const [progress, setProgress] = useState<number | null>(0);
     const [fileName, setFileName] = useState('');
     const [mimeType, setMimeType] = useState('');
     const [fileSize, setFileSize] = useState(0);
@@ -89,6 +91,7 @@ export function DownloadCard({ fileId, token, keyHex }: Props) {
             setFileName(name);
             setMimeType(mime);
             setFileSize(contentLength);
+            if (contentLength <= 0) setProgress(null);
 
             const reader = response.body!.getReader();
             const chunks: Uint8Array[] = [];
@@ -99,18 +102,23 @@ export function DownloadCard({ fileId, token, keyHex }: Props) {
                 if (done) break;
                 chunks.push(value);
                 received += value.length;
-                if (contentLength > 0) setProgress(Math.round((received / contentLength) * 50));
+                if (contentLength > 0) setProgress(Math.min(100, Math.round((received / contentLength) * 100)));
             }
+
+            setStage('decrypting');
+            setProgress(0);
+            await waitForNextPaint();
 
             const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
             const encryptedBuffer = new Uint8Array(totalLength);
             let offset = 0;
             for (const chunk of chunks) { encryptedBuffer.set(chunk, offset); offset += chunk.length; }
 
-            setStage('decrypting');
             const cryptoKey = await CryptoService.importKey(keyHex);
             const decryptedChunks: Uint8Array[] = [];
             let pos = 0;
+            const totalEncryptedChunks = Math.max(1, Math.ceil(encryptedBuffer.byteLength / ENCRYPTED_CHUNK_SIZE));
+            let decryptedChunkCount = 0;
 
             while (pos < encryptedBuffer.byteLength) {
                 const end = Math.min(pos + ENCRYPTED_CHUNK_SIZE, encryptedBuffer.byteLength);
@@ -121,8 +129,10 @@ export function DownloadCard({ fileId, token, keyHex }: Props) {
                 const decrypted = await CryptoService.decryptChunk(cryptoKey, encChunk);
                 decryptedChunks.push(new Uint8Array(decrypted));
                 pos = end;
-                setProgress(50 + Math.round((pos / encryptedBuffer.byteLength) * 50));
+                decryptedChunkCount += 1;
+                setProgress(Math.min(100, Math.round((decryptedChunkCount / totalEncryptedChunks) * 100)));
             }
+            setProgress(100);
 
             const blob = new Blob(decryptedChunks as unknown as BlobPart[], { type: mime });
             setDecryptedBlob(blob);

@@ -6,6 +6,7 @@ import { ExpiryDropdown } from '../bin/ExpiryDropdown';
 type UploadPhase = 'idle' | 'uploading' | 'finalizing' | 'done' | 'error';
 
 const MAX_QUOTA = 2 * 1024 * 1024 * 1024;
+const OVERSIZED_FILE_MESSAGE = "You can't upload more than 2GB";
 
 function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
@@ -27,13 +28,16 @@ function getFileIcon(mime: string): string {
 
 function getUploadErrorMessage(err: any): string {
     const status = err?.response?.status;
-    const message = err?.response?.data?.message ?? err?.message;
+    const rawMessage = err?.response?.data?.message ?? err?.message;
+    const message = Array.isArray(rawMessage)
+        ? rawMessage.find(msg => typeof msg === 'string' && msg.includes('2GB')) ?? rawMessage[0]
+        : rawMessage;
 
     if (status === 401 || message === 'Session expired') {
         return 'Session expired - please log out and log back in before uploading.';
     }
 
-    return message ?? 'Upload failed';
+    return typeof message === 'string' ? message : 'Upload failed';
 }
 
 interface Props {
@@ -56,22 +60,46 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
 
     const isUploading = phase === 'uploading' || phase === 'finalizing';
     const usedPct = Math.min((totalUsed / MAX_QUOTA) * 100, 100);
+    const hasFileError = !!file && file.size > MAX_QUOTA;
+
+    const selectFile = (selected: File) => {
+        setFile(selected);
+        setProgress(0);
+        setCurrentChunk(0);
+        setTotalChunks(0);
+
+        if (selected.size > MAX_QUOTA) {
+            setErrorMsg(OVERSIZED_FILE_MESSAGE);
+            setPhase('error');
+            return;
+        }
+
+        setErrorMsg('');
+        setPhase('idle');
+    };
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setDragging(false);
         const dropped = e.dataTransfer.files[0];
-        if (dropped) setFile(dropped);
+        if (dropped) selectFile(dropped);
     };
 
     const clearFile = () => {
         setFile(null);
         setPhase('idle');
+        setErrorMsg('');
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const handleUpload = async () => {
         if (!file) return;
+        if (file.size > MAX_QUOTA) {
+            setErrorMsg(OVERSIZED_FILE_MESSAGE);
+            setPhase('error');
+            return;
+        }
+
         setPhase('uploading');
         setProgress(0);
         setErrorMsg('');
@@ -131,7 +159,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                     onDrop={handleDrop}
                 >
                     <input ref={fileInputRef} type="file" style={{ display: 'none' }}
-                        onChange={e => e.target.files?.[0] && setFile(e.target.files[0])} />
+                        onChange={e => e.target.files?.[0] && selectFile(e.target.files[0])} />
 
                     {isUploading || phase === 'done' ? (
                         <div className="upload-progress-inner">
@@ -196,7 +224,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                 )}
 
                 {!isUploading && phase !== 'done' && (
-                    <button className="upload-submit-btn" disabled={!file} onClick={handleUpload}>
+                    <button className="upload-submit-btn" disabled={!file || hasFileError} onClick={handleUpload}>
                         <i className="bi bi-shield-lock" /> Encrypt & Upload
                     </button>
                 )}

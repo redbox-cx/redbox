@@ -711,6 +711,8 @@ export class MailService {
   // --- INCOMING MAIL ---
   async processIncomingMail(dto: IncomingMailDto) {
     const parsed = await simpleParser(dto.raw);
+    const headerFrom = parsed.from?.text?.trim();
+    const displayFrom = headerFrom || dto.from;
     const parsedRecipient = Array.isArray(parsed.to)
       ? parsed.to.map((recipient) => recipient.text).find(Boolean)
       : parsed.to?.text;
@@ -734,12 +736,18 @@ export class MailService {
       return { status: 'ignored', reason: 'User account is not active' };
     }
 
-    const senderEmail = extractMailAddress(dto.from);
-    const isBlocked = await this.prisma.blockedSender.findUnique({
-      where: { userId_email: { userId: user.id, email: senderEmail } }
+    const senderEmails = [
+      extractMailAddress(displayFrom),
+      extractMailAddress(dto.from),
+    ].filter((email, index, emails) => email && emails.indexOf(email) === index);
+    const isBlocked = await this.prisma.blockedSender.findFirst({
+      where: {
+        userId: user.id,
+        email: { in: senderEmails },
+      },
     });
     if (isBlocked) {
-      this.logger.log(`Ignored email from blocked sender: ${senderEmail} for user ${username}`);
+      this.logger.log(`Ignored email from blocked sender: ${isBlocked.email} for user ${username}`);
       return { status: 'ignored', reason: 'Sender is blocked' };
     }
 
@@ -768,7 +776,7 @@ export class MailService {
     }
 
     const mail = await this.storeMailboxMailForUser(user, {
-      from: dto.from,
+      from: displayFrom,
       to: cleanEmail,
       subject: parsed.subject || dto.subject || '(No subject)',
       content: mailContent,
@@ -782,7 +790,7 @@ export class MailService {
     });
 
     this.logger.log(
-      `Email from ${dto.from} for user '${username}' saved (Recipient: ${cleanEmail}, Attachments: ${preparedAttachments.length})`,
+      `Email from ${displayFrom} for user '${username}' saved (Envelope: ${dto.from}, Recipient: ${cleanEmail}, Attachments: ${preparedAttachments.length})`,
     );
     return { status: 'success', mailId: mail.id };
   }
