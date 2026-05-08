@@ -5,15 +5,15 @@ const prisma = new PrismaClient();
 
 async function main() {
   const newCode = await prisma.inviteCode.upsert({
-    where: { code: 'boss-code' },
+    where: { code: 'testcode' },
     update: { usage: 1000 },
     create: {
-      code: 'boss-code',
+      code: 'testcode',
       usage: 1000,
     },
   });
 
-  console.log('boss-code created');
+  console.log('testcode created');
   console.log(newCode);
 
   const adminUsername = process.env.ADMIN_SEED_USERNAME?.trim();
