@@ -23,11 +23,17 @@ import {
 
 const scryptAsync = promisify(scrypt);
 
-const internalSessionUserSelect = {
+const internalTokenUserSelect = {
   id: true,
   username: true,
   status: true,
   sessionKey: true,
+} as const satisfies Prisma.UserSelect;
+
+const internalValidateUserSelect = {
+  ...internalTokenUserSelect,
+  avatar: true,
+  createdAt: true,
 } as const satisfies Prisma.UserSelect;
 
 const internalProfileUserSelect = {
@@ -39,15 +45,15 @@ const internalProfileUserSelect = {
 } as const satisfies Prisma.UserSelect;
 
 const internalLoginUserSelect = {
-  ...internalSessionUserSelect,
+  ...internalTokenUserSelect,
   password: true,
   encryptedMasterKey: true,
   masterKeyIv: true,
   masterKeySalt: true,
 } as const satisfies Prisma.UserSelect;
 
-type InternalSessionUser = Prisma.UserGetPayload<{
-  select: typeof internalSessionUserSelect;
+type InternalValidateUser = Prisma.UserGetPayload<{
+  select: typeof internalValidateUserSelect;
 }>;
 type InternalProfileUser = Prisma.UserGetPayload<{
   select: typeof internalProfileUserSelect;
@@ -134,7 +140,7 @@ export class InternalAuthService {
 
     const user = await this.prismaService.user.findUnique({
       where: { id: payload.sub },
-      select: internalSessionUserSelect,
+      select: internalValidateUserSelect,
     });
 
     if (
@@ -190,11 +196,12 @@ export class InternalAuthService {
     return decrypted;
   }
 
-  private toInternalSessionUser(user: InternalSessionUser) {
+  private toInternalSessionUser(user: InternalValidateUser) {
     return {
       id: user.id,
       username: user.username,
-      sessionKey: user.sessionKey,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
     };
   }
 
