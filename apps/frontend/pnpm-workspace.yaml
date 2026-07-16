@@ -1,0 +1,8 @@
+packages:
+  - .
+
+overrides:
+  vite: npm:rolldown-vite@7.2.5
+
+allowBuilds:
+  '@swc/core': true

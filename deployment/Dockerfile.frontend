@@ -9,7 +9,7 @@ ENV VITE_API_URL=$VITE_API_URL
 
 RUN corepack enable
 
-COPY apps/frontend/package.json apps/frontend/pnpm-lock.yaml ./
+COPY apps/frontend/package.json apps/frontend/pnpm-lock.yaml apps/frontend/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY apps/frontend ./
