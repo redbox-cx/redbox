@@ -7,6 +7,9 @@ export class RegisterUsersDto {
     
     @IsString()
     @Length(5,50, {message: "Username must have between 5 - 50 characters"})
+    @Matches(/^[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)*$/, {
+        message: "Username may only contain letters and numbers, with single underscores or hyphens between them",
+    })
     username: string;
 
     @IsString()
