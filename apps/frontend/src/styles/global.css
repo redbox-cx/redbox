@@ -7037,8 +7037,11 @@ html.dash-page {
 .mc-detail-content {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.12) transparent;
 }
 
 .mc-detail-header {
@@ -7245,17 +7248,16 @@ html.dash-page {
 }
 
 .mc-iframe-wrap {
-    flex: 1;
-    overflow-y: auto;
+    flex: 0 0 auto;
+    overflow: visible;
     padding: 16px 20px;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.12) transparent;
 }
 
 .mc-iframe {
     width: 100%;
     border: none;
     display: block;
+    overflow: hidden;
     background: transparent;
     color-scheme: light;
     min-height: 100px;
@@ -7512,8 +7514,7 @@ html.dash-page {
         -webkit-backdrop-filter: none !important;
     }
 
-    .mc-iframe-wrap {
-        overflow-y: auto;
+    .mc-detail-content {
         -webkit-overflow-scrolling: touch;
     }
 }

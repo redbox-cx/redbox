@@ -59,7 +59,17 @@ export function MailDetailPanel({
         try {
             const doc = iframe.contentDocument;
             const body = doc?.body;
-            if (body) iframe.style.height = `${body.scrollHeight + 32}px`;
+            const documentElement = doc?.documentElement;
+            if (body && documentElement) {
+                iframe.style.height = '0px';
+                const contentHeight = Math.max(
+                    body.scrollHeight,
+                    body.offsetHeight,
+                    documentElement.scrollHeight,
+                    documentElement.offsetHeight,
+                );
+                iframe.style.height = `${contentHeight + 32}px`;
+            }
 
             doc?.querySelectorAll('a[href]').forEach(link => {
                 const anchor = link as HTMLAnchorElement;
@@ -201,8 +211,9 @@ export function MailDetailPanel({
                             <iframe
                                 ref={iframeRef}
                                 className="mc-iframe"
-                                srcDoc={`<base target="_blank"><style>body{font-family:'Montserrat',sans-serif;margin:0;padding:0;}</style>${selected.content}`}
+                                srcDoc={`<base target="_blank"><style>html,body{overflow:hidden!important;}body{font-family:'Montserrat',sans-serif;margin:0;padding:0;}</style>${selected.content}`}
                                 sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                                scrolling="no"
                                 onLoad={handleIframeLoad}
                                 title="Mail content"
                             />
