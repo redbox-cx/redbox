@@ -1,11 +1,12 @@
 import { 
     Controller, Post, Patch, Delete, Get, 
     Body, UseGuards, UseInterceptors, UploadedFile, 
-    Param, Res, 
+    Param, Res, Header,
     Query,
     StreamableFile,
     BadRequestException,
-    Req
+    Req,
+    ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService, storageConfig } from './files.service';
@@ -20,6 +21,7 @@ import { RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
 import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
 import type { Request } from 'express';
+import { UploadChunkConcurrencyGuard } from './upload-chunk-concurrency.guard';
 
 @Controller('files')
 export class FilesController {
@@ -63,8 +65,8 @@ export class FilesController {
 
     // send chunks
     @Patch('upload/:uploadId')
-    @UseGuards(JwtAuthGuard, RateLimitGuard)
-    @RateLimit({ name: 'files:upload:user-upload', limit: 240, windowSeconds: 60 * 60, subject: 'param-user', paramName: 'uploadId' })
+    @UseGuards(JwtAuthGuard, RateLimitGuard, UploadChunkConcurrencyGuard)
+    @RateLimit({ name: 'files:upload:user-upload', limit: 1100, windowSeconds: 24 * 60 * 60, subject: 'param-user', paramName: 'uploadId' })
     @UseInterceptors(FileInterceptor('file', storageConfig))
     async uploadChunk(
         @GetUserId() userId: string,
@@ -87,14 +89,26 @@ export class FilesController {
             userId, 
             dto.uploadId, 
             dto.fileName, 
-            dto.mimetype,
-            dto.fileKey
+            dto.mimetype ?? 'application/octet-stream',
+            dto.fileKey,
+            dto.totalChunks,
         );
         
         return {
             message: 'File successfully processed',
             result: { fileId: file.id, shareToken: file.shareToken }
         };
+    }
+
+    @Delete('uploads/:uploadId')
+    @UseGuards(JwtAuthGuard, RateLimitGuard)
+    @RateLimit({ name: 'files:cancel-upload:user', limit: 60, windowSeconds: 60 * 60, subject: 'user' })
+    async cancelUpload(
+        @GetUserId() userId: string,
+        @Param('uploadId', new ParseUUIDPipe()) uploadId: string,
+    ) {
+        await this.filesService.cancelUpload(userId, uploadId);
+        return { message: 'Upload cancelled' };
     }
 
     // delete endpoint
@@ -107,6 +121,51 @@ export class FilesController {
     }
 
     // download endpoint
+    @Get('download/:id/metadata')
+    @UseGuards(RateLimitGuard)
+    @Header('Cache-Control', 'private, no-store')
+    @RateLimit(
+        { name: 'files:download-metadata:ip', limit: 60, windowSeconds: 60, subject: 'ip' },
+        { name: 'files:download-metadata:file-ip', limit: 120, windowSeconds: 60 * 60, subject: 'param-ip', paramName: 'id' },
+    )
+    async downloadMetadata(
+        @Param('id') id: string,
+        @Query('token') token: string,
+        @Req() request: Request,
+    ) {
+        if (!token) throw new BadRequestException('Share token is required');
+        const result = await this.filesService.getDownloadMetadata(
+            id,
+            token,
+            undefined,
+            this.rateLimitService.getClientIp(request),
+        );
+        return { message: 'Download metadata fetched', result };
+    }
+
+    @Post('download/:id/metadata')
+    @UseGuards(RateLimitGuard)
+    @Header('Cache-Control', 'private, no-store')
+    @RateLimit(
+        { name: 'files:download-metadata:ip', limit: 60, windowSeconds: 60, subject: 'ip' },
+        { name: 'files:download-metadata:file-ip', limit: 120, windowSeconds: 60 * 60, subject: 'param-ip', paramName: 'id' },
+    )
+    async downloadMetadataWithPassword(
+        @Param('id') id: string,
+        @Query('token') token: string,
+        @Body() dto: DownloadFileDto,
+        @Req() request: Request,
+    ) {
+        if (!token) throw new BadRequestException('Share token is required');
+        const result = await this.filesService.getDownloadMetadata(
+            id,
+            token,
+            dto.password,
+            this.rateLimitService.getClientIp(request),
+        );
+        return { message: 'Download metadata fetched', result };
+    }
+
     @Get('download/:id')
     @UseGuards(RateLimitGuard)
     @RateLimit(
@@ -146,18 +205,41 @@ export class FilesController {
         password?: string,
     ) {
         if (!token) throw new BadRequestException('Share token is required');
-        const fileData = await this.filesService.downloadFile(
+        let fileData: Awaited<ReturnType<FilesService['downloadFile']>> | undefined;
+        let responseClosed = false;
+
+        res.once('close', () => {
+            responseClosed = true;
+            if (!res.writableEnded) {
+                fileData?.stream.destroy();
+            }
+        });
+
+        fileData = await this.filesService.downloadFile(
             id,
             token,
             password,
             this.rateLimitService.getClientIp(request),
         );
+        if (responseClosed || res.destroyed) {
+            fileData.stream.destroy();
+            return new StreamableFile(fileData.stream);
+        }
         // ASCII-safe fallback + RFC 5987 encoded name so browsers preserve the real filename
         const safeName = fileData.fileName.replace(/[^\w.\-]/g, '_');
         const encodedName = encodeURIComponent(fileData.fileName);
         res.set({
-            'Content-Type': fileData.mimeType,
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': String(fileData.encryptedSize),
             'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`,
+            'X-Redbox-Format': fileData.format,
+            'X-Redbox-Plaintext-Length': String(fileData.plaintextSize),
+            'X-Redbox-Chunk-Size': String(fileData.chunkSize),
+            'X-Redbox-Chunk-Count': String(fileData.chunkCount),
+            'X-Redbox-Encryption-Overhead': String(fileData.encryptionOverhead),
+            'X-Redbox-Mime-Type': encodeURIComponent(fileData.mimeType),
+            'Cache-Control': 'private, no-store, no-transform',
+            'X-Content-Type-Options': 'nosniff',
         });
 
         return new StreamableFile(fileData.stream);

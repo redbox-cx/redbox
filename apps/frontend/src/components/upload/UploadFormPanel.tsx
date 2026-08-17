@@ -1,12 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CryptoService } from '../../services/CryptoService';
 import { FileService, CHUNK_SIZE } from '../../services/FileService';
+import { createFileChunkAad } from '../../services/FileCryptoFormat';
 import { ExpiryDropdown } from '../bin/ExpiryDropdown';
 
 type UploadPhase = 'idle' | 'uploading' | 'finalizing' | 'done' | 'error';
-
-const MAX_QUOTA = 2 * 1024 * 1024 * 1024;
-const OVERSIZED_FILE_MESSAGE = "You can't upload more than 2GB";
 
 function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
@@ -26,9 +24,12 @@ function getFileIcon(mime: string): string {
     return 'bi-file-earmark';
 }
 
-function getUploadErrorMessage(err: any): string {
-    const status = err?.response?.status;
-    const rawMessage = err?.response?.data?.message ?? err?.message;
+function getUploadErrorMessage(err: unknown): string {
+    const error = err && typeof err === 'object'
+        ? err as { response?: { status?: unknown; data?: { message?: unknown } }; message?: unknown }
+        : null;
+    const status = error?.response?.status;
+    const rawMessage = error?.response?.data?.message ?? error?.message;
     const message = Array.isArray(rawMessage)
         ? rawMessage.find(msg => typeof msg === 'string' && msg.includes('2GB')) ?? rawMessage[0]
         : rawMessage;
@@ -42,10 +43,12 @@ function getUploadErrorMessage(err: any): string {
 
 interface Props {
     totalUsed: number;
+    quotaLimit: number;
+    maxFileSize: number;
     onUploaded: () => void;
 }
 
-export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
+export function UploadFormPanel({ totalUsed, quotaLimit, maxFileSize, onUploaded }: Props) {
     const [file, setFile] = useState<File | null>(null);
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -57,10 +60,26 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
     const [totalChunks, setTotalChunks] = useState(0);
     const [errorMsg, setErrorMsg] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const activeUploadIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        const cancelActiveUpload = () => {
+            const uploadId = activeUploadIdRef.current;
+            if (!uploadId) return;
+            activeUploadIdRef.current = null;
+            FileService.cancelUploadOnPageExit(uploadId);
+        };
+
+        window.addEventListener('pagehide', cancelActiveUpload);
+        return () => {
+            window.removeEventListener('pagehide', cancelActiveUpload);
+            cancelActiveUpload();
+        };
+    }, []);
 
     const isUploading = phase === 'uploading' || phase === 'finalizing';
-    const usedPct = Math.min((totalUsed / MAX_QUOTA) * 100, 100);
-    const hasFileError = !!file && file.size > MAX_QUOTA;
+    const usedPct = Math.min((totalUsed / quotaLimit) * 100, 100);
+    const hasFileError = !!file && file.size > maxFileSize;
 
     const selectFile = (selected: File) => {
         setFile(selected);
@@ -68,8 +87,8 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
         setCurrentChunk(0);
         setTotalChunks(0);
 
-        if (selected.size > MAX_QUOTA) {
-            setErrorMsg(OVERSIZED_FILE_MESSAGE);
+        if (selected.size > maxFileSize) {
+            setErrorMsg(`You can't upload more than ${formatBytes(maxFileSize)}`);
             setPhase('error');
             return;
         }
@@ -94,8 +113,8 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
 
     const handleUpload = async () => {
         if (!file) return;
-        if (file.size > MAX_QUOTA) {
-            setErrorMsg(OVERSIZED_FILE_MESSAGE);
+        if (file.size > maxFileSize) {
+            setErrorMsg(`You can't upload more than ${formatBytes(maxFileSize)}`);
             setPhase('error');
             return;
         }
@@ -104,18 +123,26 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
         setProgress(0);
         setErrorMsg('');
 
+        let uploadId: string | null = null;
         try {
             const { cryptoKey, keyHex } = await CryptoService.generateKey();
             const chunks = Math.ceil(file.size / CHUNK_SIZE);
             setTotalChunks(chunks);
 
-            const uploadId = await FileService.init(file.size, chunks, password || undefined, expiresIn);
+            uploadId = await FileService.init(file.size, chunks, password || undefined, expiresIn);
+            activeUploadIdRef.current = uploadId;
 
             for (let i = 0; i < chunks; i++) {
                 setCurrentChunk(i + 1);
                 const start = i * CHUNK_SIZE;
                 const buf = await file.slice(start, Math.min(start + CHUNK_SIZE, file.size)).arrayBuffer();
-                const encrypted = await CryptoService.encryptChunk(cryptoKey, buf);
+                const encrypted = await CryptoService.encryptChunk(cryptoKey, buf, createFileChunkAad({
+                    fileSize: file.size,
+                    chunkSize: CHUNK_SIZE,
+                    totalChunks: chunks,
+                    chunkIndex: i,
+                    plaintextChunkLength: buf.byteLength,
+                }));
                 await FileService.uploadChunk(uploadId, i, encrypted);
                 setProgress(Math.round(((i + 1) / chunks) * 100));
             }
@@ -128,6 +155,8 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                 mimetype: file.type || 'application/octet-stream',
                 fileKey: keyHex,
             });
+            activeUploadIdRef.current = null;
+            uploadId = null;
 
             const shareLink = `${window.location.origin}/d/${fileId}?token=${shareToken}#${keyHex}`;
             navigator.clipboard.writeText(shareLink).catch(() => {});
@@ -141,7 +170,11 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                 setExpiresIn('30d');
                 setProgress(0);
             }, 2500);
-        } catch (err: any) {
+        } catch (err: unknown) {
+            if (uploadId) {
+                activeUploadIdRef.current = null;
+                await FileService.cancelUpload(uploadId).catch(() => {});
+            }
             setErrorMsg(getUploadErrorMessage(err));
             setPhase('error');
         }
@@ -194,7 +227,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                         <div className="upload-dropzone-prompt">
                             <i className="bi bi-cloud-arrow-up upload-cloud-icon" />
                             <span className="upload-drop-label">Drop file or <span className="upload-browse-link">browse</span></span>
-                            <span className="upload-drop-hint">Max 2 GB · Encrypted in browser</span>
+                            <span className="upload-drop-hint">Max {formatBytes(maxFileSize)} · Encrypted in browser</span>
                         </div>
                     )}
                 </div>
@@ -232,7 +265,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                 <div className="upload-quota">
                     <div className="upload-quota-labels">
                         <span>{formatBytes(totalUsed)} used</span>
-                        <span>{formatBytes(MAX_QUOTA)} total</span>
+                        <span>{formatBytes(quotaLimit)} total</span>
                     </div>
                     <div className="upload-quota-track">
                         <div className="upload-quota-fill" style={{ width: `${usedPct}%` }} />

@@ -1,0 +1,143 @@
+name: Publish deployment images
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or full commit SHA to publish
+        required: true
+        default: main
+        type: string
+
+concurrency:
+  group: publish-images-${{ inputs.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  FRONTEND_API_URL: https://api.redbox.cx/api/v1
+
+jobs:
+  prepare:
+    name: Resolve release commit
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      namespace: ${{ steps.release.outputs.namespace }}
+    steps:
+      - name: Check out requested revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve immutable image tag
+        id: release
+        shell: bash
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "namespace=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+  validate:
+    name: Validate ${{ matrix.image }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: redbox-backend
+            dockerfile: deployment/Dockerfile.backend
+            build_args: ''
+          - image: redbox-frontend
+            dockerfile: deployment/Dockerfile.frontend
+            build_args: VITE_API_URL=https://api.redbox.cx/api/v1
+    steps:
+      - name: Check out resolved commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  publish:
+    name: Publish ${{ matrix.image }}
+    needs: [prepare, validate]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: redbox-backend
+            dockerfile: deployment/Dockerfile.backend
+            build_args: ''
+          - image: redbox-frontend
+            dockerfile: deployment/Dockerfile.frontend
+            build_args: VITE_API_URL=https://api.redbox.cx/api/v1
+    steps:
+      - name: Check out resolved commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish immutable image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ needs.prepare.outputs.namespace }}/${{ matrix.image }}:${{ needs.prepare.outputs.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  summary:
+    name: Deployment information
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write deployment tag
+        shell: bash
+        run: |
+          {
+            echo "## Images published"
+            echo
+            echo "Frontend API: $FRONTEND_API_URL"
+            echo
+            echo '```env'
+            echo "GHCR_NAMESPACE=${{ needs.prepare.outputs.namespace }}"
+            echo "REDBOX_IMAGE_TAG=${{ needs.prepare.outputs.sha }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

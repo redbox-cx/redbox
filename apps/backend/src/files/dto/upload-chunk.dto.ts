@@ -1,8 +1,10 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsInt, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UploadChunkDto {
     @Type(() => Number)
-    @IsNotEmpty()
+    @IsInt()
+    @Min(0)
+    @Max(204)
     chunkIndex: number;
 }

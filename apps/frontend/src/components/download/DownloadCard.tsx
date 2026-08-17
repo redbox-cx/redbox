@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { CryptoService } from '../../services/CryptoService';
-import { ENCRYPTED_CHUNK_SIZE } from '../../services/FileService';
+import { DownloadService, validateDownloadResponse, type DownloadMetadata } from '../../services/DownloadService';
+import { ServiceWorkerDownloadService } from '../../services/ServiceWorkerDownloadService';
+import { streamDecryptToFile, type SequentialWritable } from '../../services/StreamingDownloadService';
 import { ReportModal } from '../ReportModal';
 import { DownloadCardHeader } from './DownloadCardHeader';
 import { DownloadIdle } from './DownloadIdle';
 import { DownloadPasswordForm } from './DownloadPasswordForm';
 import { DownloadProgress } from './DownloadProgress';
-import { DownloadPreview } from './DownloadPreview';
+import { DownloadComplete } from './DownloadComplete';
 import { DownloadError } from './DownloadError';
 
-type Stage = 'idle' | 'password' | 'downloading' | 'decrypting' | 'preview' | 'error';
+type Stage = 'idle' | 'password' | 'downloading' | 'finalizing' | 'complete' | 'error';
+type SaveMethod = 'checking' | 'file-system' | 'browser-download' | 'unavailable';
 
-const waitForNextPaint = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+interface DownloadDestination {
+    kind: 'file-system' | 'browser-download';
+    ready: Promise<void>;
+    writable: SequentialWritable;
+    close(): Promise<void>;
+    abort(reason?: unknown): Promise<void>;
+}
 
 interface Props {
     fileId: string;
@@ -19,182 +28,358 @@ interface Props {
     keyHex: string;
 }
 
+function isAbortError(error: unknown) {
+    return error instanceof DOMException && error.name === 'AbortError';
+}
+
 export function DownloadCard({ fileId, token, keyHex }: Props) {
     const [stage, setStage] = useState<Stage>('idle');
     const [password, setPassword] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
     const [progress, setProgress] = useState<number | null>(0);
-    const [fileName, setFileName] = useState('');
-    const [mimeType, setMimeType] = useState('');
-    const [fileSize, setFileSize] = useState(0);
-    const [previewUrl, setPreviewUrl] = useState('');
-    const [decryptedBlob, setDecryptedBlob] = useState<Blob | null>(null);
+    const [metadata, setMetadata] = useState<DownloadMetadata | null>(null);
+    const [metadataRequestVersion, setMetadataRequestVersion] = useState(0);
+    const [unlocking, setUnlocking] = useState(false);
     const [reportOpen, setReportOpen] = useState(false);
-    const [isPasswordProtected, setIsPasswordProtected] = useState(false);
-    const downloadLinkRef = useRef<HTMLAnchorElement>(null);
+    const [saveMethod, setSaveMethod] = useState<SaveMethod>('checking');
+    const [saveMethodError, setSaveMethodError] = useState('');
+    const [completedWithBrowserDownload, setCompletedWithBrowserDownload] = useState(false);
+    const activeDownloadRef = useRef<AbortController | null>(null);
+    const activeDestinationRef = useRef<DownloadDestination | null>(null);
+    const activeUnlockRef = useRef<AbortController | null>(null);
+    const downloadStartingRef = useRef(false);
+    const downloadCancelableRef = useRef(false);
+    const mountedRef = useRef(true);
 
-    const buildUrl = () => `${import.meta.env.VITE_API_URL}/files/download/${fileId}?token=${token}`;
+    useEffect(() => {
+        let current = true;
 
-    const parseFileName = (contentDisposition: string | null): string => {
-        if (!contentDisposition) return 'download';
-        const rfc5987 = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-        if (rfc5987) return decodeURIComponent(rfc5987[1].trim());
-        const ascii = contentDisposition.match(/filename="([^"]+)"/);
-        return ascii?.[1] ?? 'download';
+        if (DownloadService.supportsNativeStreamingSave()) {
+            setSaveMethod('file-system');
+            return () => {
+                current = false;
+            };
+        }
+
+        setSaveMethod('checking');
+        ServiceWorkerDownloadService.prepare()
+            .then(() => {
+                if (!current) return;
+                setSaveMethodError('');
+                setSaveMethod('browser-download');
+            })
+            .catch((error: unknown) => {
+                if (!current) return;
+                setSaveMethodError(
+                    error instanceof Error
+                        ? error.message
+                        : 'Secure streaming downloads are unavailable in this browser.',
+                );
+                setSaveMethod('unavailable');
+            });
+
+        return () => {
+            current = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        setMetadata(null);
+        setErrorMsg('');
+        setStage('idle');
+
+        DownloadService.getMetadata(fileId, token, { signal: controller.signal })
+            .then(result => {
+                setMetadata(result);
+                setStage('idle');
+            })
+            .catch((error: unknown) => {
+                if (isAbortError(error)) return;
+                if (DownloadService.isPasswordRequired(error)) {
+                    setStage('password');
+                    return;
+                }
+                setErrorMsg(error instanceof Error ? error.message : 'Could not load file metadata.');
+                setStage('error');
+            });
+
+        return () => controller.abort();
+    }, [fileId, token, metadataRequestVersion]);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            activeDownloadRef.current?.abort();
+            void activeDestinationRef.current?.abort(new DOMException('Download cancelled', 'AbortError'));
+            activeUnlockRef.current?.abort();
+        };
+    }, []);
+
+    const resetStage = () => {
+        setErrorMsg('');
+        setProgress(0);
+        if (!metadata) {
+            setMetadataRequestVersion(version => version + 1);
+            return;
+        }
+        setStage('idle');
     };
 
-    const canPreview = (mime: string) =>
-        mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime.includes('pdf');
+    const unlockMetadata = async (providedPassword: string) => {
+        if (providedPassword.length < 1 || providedPassword.length > 100) {
+            setErrorMsg('Password must have between 1 and 100 characters.');
+            return;
+        }
+        if (activeUnlockRef.current) return;
 
-    const triggerDownload = (blob: Blob, name: string) => {
-        const url = URL.createObjectURL(blob);
-        const a = downloadLinkRef.current!;
-        a.href = url;
-        a.download = name;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        const controller = new AbortController();
+        activeUnlockRef.current = controller;
+        setUnlocking(true);
+        setErrorMsg('');
+
+        try {
+            const result = await DownloadService.getMetadata(fileId, token, {
+                password: providedPassword,
+                signal: controller.signal,
+            });
+            if (controller.signal.aborted || !mountedRef.current) return;
+            setMetadata(result);
+            setStage('idle');
+        } catch (error: unknown) {
+            if (isAbortError(error) || controller.signal.aborted || !mountedRef.current) return;
+            setErrorMsg(
+                DownloadService.isPasswordRequired(error)
+                    ? 'Incorrect password. Try again.'
+                    : error instanceof Error ? error.message : 'Could not unlock file metadata.',
+            );
+        } finally {
+            if (activeUnlockRef.current === controller) {
+                activeUnlockRef.current = null;
+                if (mountedRef.current) setUnlocking(false);
+            }
+        }
     };
 
-    const startDownload = async (pwd?: string) => {
-        if (!keyHex || keyHex.length !== 64) {
+    const startDownload = async (providedPassword?: string) => {
+        if (!metadata) {
+            setErrorMsg('File metadata is still loading.');
+            setStage('error');
+            return;
+        }
+        if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) {
             setErrorMsg('Invalid or missing decryption key in the URL fragment.');
             setStage('error');
             return;
         }
+        if (
+            metadata.passwordProtected &&
+            (providedPassword === undefined || providedPassword.length < 1 || providedPassword.length > 100)
+        ) {
+            setErrorMsg('Password must have between 1 and 100 characters.');
+            setStage('password');
+            return;
+        }
+        if (saveMethod === 'checking') {
+            setErrorMsg('The secure download service is still starting. Please retry in a moment.');
+            setStage('error');
+            return;
+        }
+        if (saveMethod === 'unavailable') {
+            setErrorMsg(saveMethodError || 'Secure streaming downloads are unavailable in this browser.');
+            setStage('error');
+            return;
+        }
+        if (downloadStartingRef.current || activeDownloadRef.current) return;
+        downloadStartingRef.current = true;
 
-        setStage('downloading');
-        setProgress(0);
-        setErrorMsg('');
+        let controller: AbortController | null = null;
+        let fileHandle: FileSystemFileHandle | null = null;
+        let destination: DownloadDestination | null = null;
+        let response: Response | null = null;
 
         try {
-            const response = await fetch(buildUrl(), {
-                method: pwd ? 'POST' : 'GET',
-                headers: {
-                    Authorization: `Bearer ${localStorage.getItem('access_token') ?? ''}`,
-                    ...(pwd ? { 'Content-Type': 'application/json' } : {}),
-                },
-                body: pwd ? JSON.stringify({ password: pwd }) : undefined,
-            });
+            if (saveMethod === 'file-system') {
+                // Must be called directly from the user's click/submit event before
+                // network awaits, otherwise browsers reject the save picker.
+                fileHandle = await DownloadService.pickSaveFile(metadata.fileName);
+                if (!mountedRef.current) return;
+            }
+
+            controller = new AbortController();
+            activeDownloadRef.current = controller;
+
+            if (saveMethod === 'browser-download') {
+                // This posts the stream and clicks the same-origin download URL
+                // synchronously while the user's click is still active.
+                destination = ServiceWorkerDownloadService.createDestination(metadata, controller);
+                activeDestinationRef.current = destination;
+            }
+
+            downloadCancelableRef.current = true;
+            setStage('downloading');
+            setProgress(0);
+            setErrorMsg('');
+
+            if (destination?.kind === 'browser-download') {
+                await destination.ready;
+            }
+
+            response = await DownloadService.fetchEncryptedFile(
+                fileId,
+                token,
+                providedPassword,
+                controller.signal,
+            );
 
             if (response.status === 403) {
-                setIsPasswordProtected(true);
+                await response.body?.cancel().catch(() => {});
+                await destination?.abort(new Error('Download authorization failed.'));
+                setMetadata(null);
                 setStage('password');
-                if (pwd) setErrorMsg('Incorrect password. Try again.');
+                setErrorMsg(providedPassword ? 'Incorrect password. Try again.' : 'This file is password protected.');
                 return;
             }
-
-            if (!response.ok) throw new Error(`Server error: ${response.status}`);
-
-            const name = parseFileName(response.headers.get('content-disposition'));
-            const mime = response.headers.get('content-type') ?? 'application/octet-stream';
-            const contentLength = parseInt(response.headers.get('content-length') ?? '0', 10);
-            setFileName(name);
-            setMimeType(mime);
-            setFileSize(contentLength);
-            if (contentLength <= 0) setProgress(null);
-
-            const reader = response.body!.getReader();
-            const chunks: Uint8Array[] = [];
-            let received = 0;
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                chunks.push(value);
-                received += value.length;
-                if (contentLength > 0) setProgress(Math.min(100, Math.round((received / contentLength) * 100)));
+            if (!response.ok) {
+                throw new Error(await DownloadService.getResponseError(response));
             }
 
-            setStage('decrypting');
-            setProgress(0);
-            await waitForNextPaint();
-
-            const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
-            const encryptedBuffer = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of chunks) { encryptedBuffer.set(chunk, offset); offset += chunk.length; }
-
+            validateDownloadResponse(response, metadata);
             const cryptoKey = await CryptoService.importKey(keyHex);
-            const decryptedChunks: Uint8Array[] = [];
-            let pos = 0;
-            const totalEncryptedChunks = Math.max(1, Math.ceil(encryptedBuffer.byteLength / ENCRYPTED_CHUNK_SIZE));
-            let decryptedChunkCount = 0;
 
-            while (pos < encryptedBuffer.byteLength) {
-                const end = Math.min(pos + ENCRYPTED_CHUNK_SIZE, encryptedBuffer.byteLength);
-                const encChunk = encryptedBuffer.buffer.slice(
-                    encryptedBuffer.byteOffset + pos,
-                    encryptedBuffer.byteOffset + end
-                );
-                const decrypted = await CryptoService.decryptChunk(cryptoKey, encChunk);
-                decryptedChunks.push(new Uint8Array(decrypted));
-                pos = end;
-                decryptedChunkCount += 1;
-                setProgress(Math.min(100, Math.round((decryptedChunkCount / totalEncryptedChunks) * 100)));
+            if (saveMethod === 'file-system') {
+                if (!fileHandle) throw new Error('No save location was selected.');
+                const writable = await fileHandle.createWritable();
+                destination = {
+                    kind: 'file-system',
+                    ready: Promise.resolve(),
+                    writable,
+                    close: () => writable.close(),
+                    abort: reason => writable.abort(reason),
+                };
+                activeDestinationRef.current = destination;
             }
+            if (!destination) throw new Error('No secure download destination is available.');
+
+            await streamDecryptToFile({
+                source: response.body!,
+                writable: destination.writable,
+                cryptoKey,
+                metadata,
+                signal: controller.signal,
+                onProgress: setProgress,
+            });
+
+            downloadCancelableRef.current = false;
+            setStage('finalizing');
+            if (controller.signal.aborted) {
+                throw new DOMException('Download cancelled', 'AbortError');
+            }
+            const browserManagedDownload = destination.kind === 'browser-download';
+            await destination.close();
+            if (!mountedRef.current) return;
+            setCompletedWithBrowserDownload(browserManagedDownload);
             setProgress(100);
+            setStage('complete');
+        } catch (error: unknown) {
+            await response?.body?.cancel(error).catch(() => {});
+            await destination?.abort(error).catch(() => {});
 
-            const blob = new Blob(decryptedChunks as unknown as BlobPart[], { type: mime });
-            setDecryptedBlob(blob);
-
-            if (canPreview(mime)) {
-                setPreviewUrl(URL.createObjectURL(blob));
+            if (!mountedRef.current) return;
+            if (!controller && isAbortError(error)) return;
+            const abortReason = controller?.signal.aborted ? controller.signal.reason : undefined;
+            if (
+                (controller?.signal.aborted && (abortReason === undefined || isAbortError(abortReason))) ||
+                (!controller?.signal.aborted && isAbortError(error))
+            ) {
+                setErrorMsg('Download cancelled.');
+            } else if (controller?.signal.aborted && abortReason instanceof Error) {
+                setErrorMsg(`The browser download failed: ${abortReason.message}`);
+            } else if (error instanceof DOMException && error.name === 'OperationError') {
+                setErrorMsg('The decryption key is wrong or the encrypted file is corrupted.');
             } else {
-                triggerDownload(blob, name);
+                setErrorMsg(error instanceof Error ? error.message : 'Download or decryption failed.');
             }
-            setStage('preview');
-        } catch (err: unknown) {
-            setErrorMsg(err instanceof Error ? err.message : 'Download or decryption failed.');
             setStage('error');
+        } finally {
+            downloadStartingRef.current = false;
+            downloadCancelableRef.current = false;
+            if (controller && activeDownloadRef.current === controller) {
+                activeDownloadRef.current = null;
+            }
+            if (destination && activeDestinationRef.current === destination) {
+                activeDestinationRef.current = null;
+            }
         }
     };
 
-    useEffect(() => {
-        return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
-    }, [previewUrl]);
-
     return (
         <>
-            <a ref={downloadLinkRef} style={{ display: 'none' }}>hidden</a>
             {reportOpen && (
                 <ReportModal
                     onClose={() => setReportOpen(false)}
-                    isPasswordProtected={isPasswordProtected}
+                    isPasswordProtected={metadata?.passwordProtected ?? false}
                     showPasswordField
-                    knownPassword={isPasswordProtected && stage !== 'password' && stage !== 'idle' ? password : undefined}
+                    knownPassword={metadata?.passwordProtected && stage === 'complete' ? password : undefined}
                 />
             )}
             <div className="dl-card">
                 <DownloadCardHeader
                     stage={stage}
-                    fileName={fileName}
-                    mimeType={mimeType}
-                    fileSize={fileSize}
+                    fileName={metadata?.fileName ?? ''}
+                    mimeType={metadata?.mimeType ?? ''}
+                    fileSize={metadata?.plaintextSize ?? 0}
                     onReport={() => setReportOpen(true)}
                 />
-                {stage === 'idle' && <DownloadIdle onStart={() => startDownload()} />}
+                {stage === 'idle' && (
+                    <DownloadIdle
+                        onStart={() => startDownload(metadata?.passwordProtected ? password : undefined)}
+                        disabled={!metadata || saveMethod === 'checking' || saveMethod === 'unavailable'}
+                        disabledLabel={
+                            !metadata
+                                ? 'Loading file...'
+                                : saveMethod === 'checking'
+                                    ? 'Preparing secure download...'
+                                    : saveMethod === 'unavailable'
+                                        ? 'Secure streaming unavailable'
+                                        : undefined
+                        }
+                        notice={saveMethod === 'unavailable' ? saveMethodError : undefined}
+                    />
+                )}
                 {stage === 'password' && (
                     <DownloadPasswordForm
                         password={password}
                         errorMsg={errorMsg}
+                        disabled={unlocking}
                         onChange={setPassword}
-                        onSubmit={e => { e.preventDefault(); startDownload(password); }}
+                        onSubmit={event => {
+                            event.preventDefault();
+                            unlockMetadata(password);
+                        }}
                     />
                 )}
-                {(stage === 'downloading' || stage === 'decrypting') && (
-                    <DownloadProgress stage={stage} progress={progress} />
+                {(stage === 'downloading' || stage === 'finalizing') && (
+                    <DownloadProgress
+                        stage={stage}
+                        progress={progress}
+                        onCancel={stage === 'downloading'
+                            ? () => {
+                                if (downloadCancelableRef.current) activeDownloadRef.current?.abort();
+                            }
+                            : undefined}
+                    />
                 )}
-                {stage === 'preview' && (
-                    <DownloadPreview
-                        previewUrl={previewUrl}
-                        mimeType={mimeType}
-                        fileName={fileName}
-                        decryptedBlob={decryptedBlob}
-                        onSave={() => triggerDownload(decryptedBlob!, fileName)}
+                {stage === 'complete' && metadata && (
+                    <DownloadComplete
+                        fileName={metadata.fileName}
+                        browserManaged={completedWithBrowserDownload}
+                        onDownloadAnotherCopy={resetStage}
                     />
                 )}
                 {stage === 'error' && (
-                    <DownloadError errorMsg={errorMsg} onRetry={() => setStage('idle')} />
+                    <DownloadError errorMsg={errorMsg} onRetry={resetStage} />
                 )}
             </div>
         </>

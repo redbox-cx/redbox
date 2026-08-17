@@ -46,6 +46,8 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      MINIO_API_STALE_UPLOADS_EXPIRY: ${MINIO_STALE_UPLOADS_EXPIRY:-168h}
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: ${MINIO_STALE_UPLOADS_CLEANUP_INTERVAL:-1h}
     volumes:
       - minio_data:/data
     expose:
@@ -76,10 +78,7 @@ services:
       - redbox_backend
 
   backend:
-    image: redbox-backend:latest
-    build:
-      context: ../..
-      dockerfile: deployment/Dockerfile.backend
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-backend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     restart: unless-stopped
     command: ["node", "dist/src/main"]
     env_file:
@@ -100,10 +99,7 @@ services:
       - redbox_backend
 
   admin-backend:
-    image: redbox-backend:latest
-    build:
-      context: ../..
-      dockerfile: deployment/Dockerfile.backend
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-backend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     restart: unless-stopped
     command: ["node", "dist/src/main-admin"]
     env_file:
@@ -136,7 +132,7 @@ services:
       - redbox_backend
 
   migrate:
-    image: redbox-backend:latest
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-backend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     profiles:
       - tools
     restart: "no"
@@ -151,7 +147,7 @@ services:
       - redbox_backend
 
   seed-admin:
-    image: redbox-backend:latest
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-backend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     profiles:
       - tools
     restart: "no"

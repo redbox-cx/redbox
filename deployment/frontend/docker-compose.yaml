@@ -2,12 +2,7 @@ name: redbox-frontend
 
 services:
   frontend:
-    image: redbox-frontend:latest
-    build:
-      context: ../..
-      dockerfile: deployment/Dockerfile.frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL:-https://api.redbox.cx/api/v1}
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-frontend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     restart: unless-stopped
     expose:
       - "80"
