@@ -5,9 +5,6 @@ import { ExpiryDropdown } from '../bin/ExpiryDropdown';
 
 type UploadPhase = 'idle' | 'uploading' | 'finalizing' | 'done' | 'error';
 
-const MAX_QUOTA = 2 * 1024 * 1024 * 1024;
-const OVERSIZED_FILE_MESSAGE = "You can't upload more than 2GB";
-
 function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -42,10 +39,12 @@ function getUploadErrorMessage(err: any): string {
 
 interface Props {
     totalUsed: number;
+    quotaLimit: number;
+    maxFileSize: number;
     onUploaded: () => void;
 }
 
-export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
+export function UploadFormPanel({ totalUsed, quotaLimit, maxFileSize, onUploaded }: Props) {
     const [file, setFile] = useState<File | null>(null);
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -59,8 +58,8 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const isUploading = phase === 'uploading' || phase === 'finalizing';
-    const usedPct = Math.min((totalUsed / MAX_QUOTA) * 100, 100);
-    const hasFileError = !!file && file.size > MAX_QUOTA;
+    const usedPct = Math.min((totalUsed / quotaLimit) * 100, 100);
+    const hasFileError = !!file && file.size > maxFileSize;
 
     const selectFile = (selected: File) => {
         setFile(selected);
@@ -68,8 +67,8 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
         setCurrentChunk(0);
         setTotalChunks(0);
 
-        if (selected.size > MAX_QUOTA) {
-            setErrorMsg(OVERSIZED_FILE_MESSAGE);
+        if (selected.size > maxFileSize) {
+            setErrorMsg(`You can't upload more than ${formatBytes(maxFileSize)}`);
             setPhase('error');
             return;
         }
@@ -94,8 +93,8 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
 
     const handleUpload = async () => {
         if (!file) return;
-        if (file.size > MAX_QUOTA) {
-            setErrorMsg(OVERSIZED_FILE_MESSAGE);
+        if (file.size > maxFileSize) {
+            setErrorMsg(`You can't upload more than ${formatBytes(maxFileSize)}`);
             setPhase('error');
             return;
         }
@@ -194,7 +193,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                         <div className="upload-dropzone-prompt">
                             <i className="bi bi-cloud-arrow-up upload-cloud-icon" />
                             <span className="upload-drop-label">Drop file or <span className="upload-browse-link">browse</span></span>
-                            <span className="upload-drop-hint">Max 2 GB · Encrypted in browser</span>
+                            <span className="upload-drop-hint">Max {formatBytes(maxFileSize)} · Encrypted in browser</span>
                         </div>
                     )}
                 </div>
@@ -232,7 +231,7 @@ export function UploadFormPanel({ totalUsed, onUploaded }: Props) {
                 <div className="upload-quota">
                     <div className="upload-quota-labels">
                         <span>{formatBytes(totalUsed)} used</span>
-                        <span>{formatBytes(MAX_QUOTA)} total</span>
+                        <span>{formatBytes(quotaLimit)} total</span>
                     </div>
                     <div className="upload-quota-track">
                         <div className="upload-quota-fill" style={{ width: `${usedPct}%` }} />

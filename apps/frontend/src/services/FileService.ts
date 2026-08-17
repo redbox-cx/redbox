@@ -51,7 +51,12 @@ export const FileService = {
         return data.result;
     },
 
-    async getFiles(): Promise<{ files: FileEntry[]; totalUsed: number }> {
+    async getFiles(): Promise<{
+        files: FileEntry[];
+        totalUsed: number;
+        quotaLimit: number;
+        maxFileSize: number;
+    }> {
         const { data } = await apiClient.get('/files');
         return data.result;
     },
