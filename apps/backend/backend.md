@@ -1,7 +1,7 @@
 # redbox -- Backend API Documentation
 
 redbox is a high-security, zero-knowledge file-sharing platform.
-It allows users to upload large files (up to 2GB) to a 10TB infrastructure,
+It allows users to upload large files (up to 10GB for the configured admin user) to a 10TB infrastructure,
 share them via secure links, and
 ensures data is automatically wiped after 30 days.
 
@@ -145,7 +145,7 @@ Auth: Bearer `<access_token>`{=html}
 }
 ```
 
-Logic: Checks 2GB quota. If a password is provided, it is hashed and
+Logic: Checks the per-user quota (2GB by default, 50GB for the configured admin username). If a password is provided, it is hashed and
 stored in Redis temp metadata.
 
 ### Phase 2: Sequential Chunk Upload

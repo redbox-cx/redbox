@@ -64,7 +64,7 @@ export class FilesController {
     // send chunks
     @Patch('upload/:uploadId')
     @UseGuards(JwtAuthGuard, RateLimitGuard)
-    @RateLimit({ name: 'files:upload:user-upload', limit: 240, windowSeconds: 60 * 60, subject: 'param-user', paramName: 'uploadId' })
+    @RateLimit({ name: 'files:upload:user-upload', limit: 300, windowSeconds: 60 * 60, subject: 'param-user', paramName: 'uploadId' })
     @UseInterceptors(FileInterceptor('file', storageConfig))
     async uploadChunk(
         @GetUserId() userId: string,

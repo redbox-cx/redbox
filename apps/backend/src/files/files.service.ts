@@ -16,9 +16,16 @@ import { Readable } from 'stream';
 import { memoryStorage } from 'multer';
 import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
 import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
+import { getAdminForwardUsername } from 'src/common/mail/admin-mail-aliases';
 
 const MAX_ACTIVE_UPLOADS_PER_USER = 3;
 const UPLOAD_META_TTL_SECONDS = 86400;
+const DEFAULT_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024 - 1;
+const ADMIN_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 * 1024;
+const DEFAULT_FILE_QUOTA_BYTES = 2 * 1024 * 1024 * 1024;
+const ADMIN_FILE_QUOTA_BYTES = 50 * 1024 * 1024 * 1024;
+const PLAINTEXT_CHUNK_SIZE_BYTES = 50 * 1024 * 1024;
+const ENCRYPTED_CHUNK_OVERHEAD_BYTES = 12 + 16;
 
 type UploadMeta = {
     totalChunks: number;
@@ -41,7 +48,6 @@ type ActiveUploadCandidate = {
 @Injectable()
 export class FilesService {
     private readonly logger = new Logger(FilesService.name);
-    private readonly MAX_QUOTA = 2 * 1024 * 1024 * 1024; // 2GB
     private readonly s3: S3Client;
     private readonly bucket = requireBucket('S3_BUCKET_FILES');
 
@@ -64,15 +70,29 @@ export class FilesService {
     async initializeUpload(userId: string, fileSize: number, totalChunks: number, password?: string, expiresIn?: string) {
         await this.getMasterKeyForUser(userId);
 
-        if (fileSize > this.MAX_QUOTA) throw new BadRequestException('File too large');
+        const expectedChunks = Math.ceil(fileSize / PLAINTEXT_CHUNK_SIZE_BYTES);
+        if (totalChunks !== expectedChunks) {
+            throw new BadRequestException(`Invalid chunk count. Expected ${expectedChunks}`);
+        }
 
         await this.prisma.$transaction(async (tx) => {
+            const user = await tx.user.findUnique({
+                where: { id: userId },
+                select: { username: true },
+            });
+            if (!user) throw new UnauthorizedException('User not found');
+
+            const limits = this.getFileLimitsForUsername(user.username);
+            if (fileSize > limits.maxFileSize) {
+                throw new BadRequestException('File too large');
+            }
+
             const aggregation = await tx.file.aggregate({
                 where: { userId },
                 _sum: { size: true },
             });
             const currentUsage = Number(aggregation._sum?.size ?? 0);
-            if (currentUsage + fileSize > this.MAX_QUOTA) {
+            if (currentUsage + fileSize > limits.quotaLimit) {
                 throw new BadRequestException('Quota exceeded');
             }
         });
@@ -142,7 +162,7 @@ export class FilesService {
 
         if (!metaStr) throw new BadRequestException('Invalid or expired Upload ID');
 
-        const meta = JSON.parse(metaStr);
+        const meta = JSON.parse(metaStr) as UploadMeta;
 
         if (Number(chunkIndex) !== meta.nextExpectedChunk) {
             throw new BadRequestException(`Wrong chunk order. Expected index ${meta.nextExpectedChunk}`);
@@ -150,6 +170,14 @@ export class FilesService {
 
         if (Number(chunkIndex) >= meta.totalChunks) {
             throw new BadRequestException(`Invalid chunk index. Total chunks is ${meta.totalChunks}`);
+        }
+
+        const expectedPlaintextSize = chunkIndex < meta.totalChunks - 1
+            ? PLAINTEXT_CHUNK_SIZE_BYTES
+            : meta.fileSize - ((meta.totalChunks - 1) * PLAINTEXT_CHUNK_SIZE_BYTES);
+        const expectedEncryptedSize = expectedPlaintextSize + ENCRYPTED_CHUNK_OVERHEAD_BYTES;
+        if (file.size !== expectedEncryptedSize) {
+            throw new BadRequestException(`Invalid chunk size. Expected ${expectedEncryptedSize} bytes`);
         }
 
         const partNumber = chunkIndex + 1;
@@ -180,12 +208,13 @@ export class FilesService {
 
         const metaStr = await this.redis.get(this.getUploadMetaKey(userId, uploadId));
         if (!metaStr) throw new BadRequestException('Metadata expired');
-        const meta = JSON.parse(metaStr);
+        const meta = JSON.parse(metaStr) as UploadMeta;
 
         if (meta.parts.length !== meta.totalChunks) {
             throw new BadRequestException('Not all chunks uploaded yet');
         }
 
+        let multipartCompleted = false;
         try {
             await this.s3.send(new CompleteMultipartUploadCommand({
                 Bucket: this.bucket,
@@ -195,19 +224,46 @@ export class FilesService {
                     Parts: meta.parts.sort((a, b) => a.PartNumber - b.PartNumber),
                 },
             }));
+            multipartCompleted = true;
 
-            const fileRecord = await this.prisma.file.create({
-                data: {
-                    originalName: fileName,
-                    storageName: meta.storageKey,
-                    size: meta.fileSize,
-                    mimetype,
-                    userId,
-                    passwordHash: meta.passwordHash,
-                    expiresAt: this.calculateExpiration(meta.expiresIn),
-                    encryptedFileKey,
-                    fileKeyIv: fileKeyIv.toString('hex'),
-                },
+            const fileRecord = await this.prisma.$transaction(async (tx) => {
+                await tx.$queryRaw<Array<{ id: string }>>`
+                    SELECT id FROM \`User\` WHERE id = ${userId} FOR UPDATE
+                `;
+
+                const user = await tx.user.findUnique({
+                    where: { id: userId },
+                    select: { username: true },
+                });
+                if (!user) throw new UnauthorizedException('User not found');
+
+                const limits = this.getFileLimitsForUsername(user.username);
+                if (meta.fileSize > limits.maxFileSize) {
+                    throw new BadRequestException('File too large');
+                }
+
+                const aggregation = await tx.file.aggregate({
+                    where: { userId },
+                    _sum: { size: true },
+                });
+                const currentUsage = Number(aggregation._sum?.size ?? 0);
+                if (currentUsage + meta.fileSize > limits.quotaLimit) {
+                    throw new BadRequestException('Quota exceeded');
+                }
+
+                return tx.file.create({
+                    data: {
+                        originalName: fileName,
+                        storageName: meta.storageKey,
+                        size: BigInt(meta.fileSize),
+                        mimetype,
+                        userId,
+                        passwordHash: meta.passwordHash,
+                        expiresAt: this.calculateExpiration(meta.expiresIn),
+                        encryptedFileKey,
+                        fileKeyIv: fileKeyIv.toString('hex'),
+                    },
+                });
             });
 
             await this.redis.del(`upload:meta:${userId}:${uploadId}`);
@@ -215,14 +271,25 @@ export class FilesService {
             return fileRecord;
 
         } catch (error) {
-            await this.s3.send(new AbortMultipartUploadCommand({
-                Bucket: this.bucket,
-                Key: meta.storageKey,
-                UploadId: meta.s3UploadId,
-            })).catch(() => {});
+            if (multipartCompleted) {
+                await this.s3.send(new DeleteObjectCommand({
+                    Bucket: this.bucket,
+                    Key: meta.storageKey,
+                })).catch(() => {});
+            } else {
+                await this.s3.send(new AbortMultipartUploadCommand({
+                    Bucket: this.bucket,
+                    Key: meta.storageKey,
+                    UploadId: meta.s3UploadId,
+                })).catch(() => {});
+            }
 
             this.logger.error(`Finalize failed for uploadId ${uploadId}:`, error);
+            await this.redis.del(this.getUploadMetaKey(userId, uploadId));
             await this.releaseActiveUpload(userId, uploadId);
+            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+                throw error;
+            }
             throw new InternalServerErrorException('Finalize failed');
         }
     }
@@ -281,6 +348,12 @@ export class FilesService {
     async getUserFilesWithQuota(userId: string) {
         const masterKey = await this.getMasterKeyForUser(userId);
 
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { username: true },
+        });
+        if (!user) throw new UnauthorizedException('User not found');
+
         const files = await this.prisma.file.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
@@ -299,7 +372,7 @@ export class FilesService {
             return {
                 id: file.id,
                 originalName: file.originalName,
-                size: file.size,
+                size: Number(file.size),
                 mimetype: file.mimetype,
                 createdAt: file.createdAt,
                 expiresAt: file.expiresAt,
@@ -308,7 +381,13 @@ export class FilesService {
         });
 
         const aggregation = await this.prisma.file.aggregate({ where: { userId }, _sum: { size: true } });
-        return { files: processedFiles, totalUsed: aggregation._sum.size || 0 };
+        const limits = this.getFileLimitsForUsername(user.username);
+        return {
+            files: processedFiles,
+            totalUsed: Number(aggregation._sum.size ?? 0),
+            quotaLimit: limits.quotaLimit,
+            maxFileSize: limits.maxFileSize,
+        };
     }
 
     @Cron(CronExpression.EVERY_HOUR)
@@ -362,6 +441,21 @@ export class FilesService {
 
     private getUploadMetaKey(userId: string, uploadId: string) {
         return `upload:meta:${userId}:${uploadId}`;
+    }
+
+    private getFileLimitsForUsername(username: string) {
+        const adminUsername = getAdminForwardUsername();
+        if (adminUsername && username === adminUsername) {
+            return {
+                maxFileSize: ADMIN_MAX_FILE_SIZE_BYTES,
+                quotaLimit: ADMIN_FILE_QUOTA_BYTES,
+            };
+        }
+
+        return {
+            maxFileSize: DEFAULT_MAX_FILE_SIZE_BYTES,
+            quotaLimit: DEFAULT_FILE_QUOTA_BYTES,
+        };
     }
 
     private async makeRoomForActiveUpload(userId: string) {

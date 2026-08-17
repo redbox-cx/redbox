@@ -1,0 +1,2 @@
+ALTER TABLE `File`
+MODIFY `size` BIGINT NOT NULL;
