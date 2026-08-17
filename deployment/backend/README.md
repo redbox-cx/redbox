@@ -60,3 +60,19 @@ docker compose --env-file deployment/backend/.env -f deployment/backend/docker-c
 ```
 
 `seed-admin` is never started automatically.
+
+## Incomplete file uploads
+
+Redbox allows only one active multipart file upload per user. Reloading or
+closing the upload page requests an immediate authenticated abort. The backend
+also scans every ten minutes and aborts multipart uploads that have had no
+activity for one hour, even when their Redis metadata has already disappeared.
+
+MinIO is configured with an independent seven-day stale-upload fallback. This
+last safety net still works while the backend or Redis is unavailable and does
+not delete completed objects. Apply MinIO environment changes by recreating the
+service:
+
+```bash
+docker compose --env-file deployment/backend/.env -f deployment/backend/docker-compose.yaml up -d --force-recreate minio
+```

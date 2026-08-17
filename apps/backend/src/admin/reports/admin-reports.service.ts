@@ -135,7 +135,7 @@ export class AdminReportsService {
         reviewLink,
         rawLink: report.contentLink,
         hasDecryptionKey: this.hasDecryptionKey(report.contentLink),
-        fileSize: resource?.size ?? 0,
+        fileSize: Number(resource?.size ?? 0),
         fileCreationDate: resource?.createdAt?.toISOString() ?? report.createdAt.toISOString(),
         reason: report.reason,
         reporterEmail: report.reporterEmail,

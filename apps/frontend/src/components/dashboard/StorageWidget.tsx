@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
-import apiClient from "../../api/apiClient";
+import { FileService } from "../../services/FileService";
 
 export function StorageWidget() {
     const [usedBytes, setUsedBytes] = useState(0);
-    const totalQuota = 2 * 1024 * 1024 * 1024;
+    const [totalQuota, setTotalQuota] = useState(2 * 1024 * 1024 * 1024);
 
     useEffect(() => {
-        apiClient.get('/files').then(res => {
-            if (res.data.result) setUsedBytes(res.data.result.totalUsed);
+        FileService.getFiles().then(result => {
+            setUsedBytes(result.totalUsed);
+            setTotalQuota(result.quotaLimit);
         }).catch(() => setUsedBytes(0));
     }, []);
 
     const usedGB = (usedBytes / (1024 ** 3)).toFixed(1);
+    const quotaGB = totalQuota / (1024 ** 3);
     const percentage = Math.min((usedBytes / totalQuota) * 100, 100);
 
     return (
@@ -22,7 +24,7 @@ export function StorageWidget() {
                     <div className="donut-chart" style={{"--used": percentage} as any}>
                         <div className="donut-inner">
                             <strong>{usedGB} GB</strong>
-                            <span>Used of 2GB</span>
+                            <span>Used of {quotaGB} GB</span>
                         </div>
                     </div>
                     <div className="storage-legend">

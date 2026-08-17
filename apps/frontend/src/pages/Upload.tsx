@@ -8,6 +8,8 @@ import { UploadFilesPanel } from '../components/upload/UploadFilesPanel';
 export function Upload() {
     const [fileList, setFileList] = useState<FileEntry[]>([]);
     const [totalUsed, setTotalUsed] = useState(0);
+    const [quotaLimit, setQuotaLimit] = useState(2 * 1024 * 1024 * 1024);
+    const [maxFileSize, setMaxFileSize] = useState(2 * 1024 * 1024 * 1024 - 1);
     const [loadingFiles, setLoadingFiles] = useState(true);
     const [filesError, setFilesError] = useState('');
     const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -21,9 +23,11 @@ export function Upload() {
 
     const loadFiles = useCallback(async () => {
         try {
-            const { files, totalUsed } = await FileService.getFiles();
+            const { files, totalUsed, quotaLimit, maxFileSize } = await FileService.getFiles();
             setFileList(files);
             setTotalUsed(totalUsed);
+            setQuotaLimit(quotaLimit);
+            setMaxFileSize(maxFileSize);
             setFilesError('');
         } catch (err: any) {
             setFilesError(err?.response?.status === 401
@@ -65,7 +69,12 @@ export function Upload() {
             <div className="blob blob-2" />
             <TopBar />
             <main className="upload-drive-container">
-                <UploadFormPanel totalUsed={totalUsed} onUploaded={loadFiles} />
+                <UploadFormPanel
+                    totalUsed={totalUsed}
+                    quotaLimit={quotaLimit}
+                    maxFileSize={maxFileSize}
+                    onUploaded={loadFiles}
+                />
                 <UploadFilesPanel
                     files={fileList}
                     loading={loadingFiles}
