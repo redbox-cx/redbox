@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CryptoService } from '../../services/CryptoService';
 import { FileService, CHUNK_SIZE } from '../../services/FileService';
 import { createFileChunkAad } from '../../services/FileCryptoFormat';
@@ -60,6 +60,22 @@ export function UploadFormPanel({ totalUsed, quotaLimit, maxFileSize, onUploaded
     const [totalChunks, setTotalChunks] = useState(0);
     const [errorMsg, setErrorMsg] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const activeUploadIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        const cancelActiveUpload = () => {
+            const uploadId = activeUploadIdRef.current;
+            if (!uploadId) return;
+            activeUploadIdRef.current = null;
+            FileService.cancelUploadOnPageExit(uploadId);
+        };
+
+        window.addEventListener('pagehide', cancelActiveUpload);
+        return () => {
+            window.removeEventListener('pagehide', cancelActiveUpload);
+            cancelActiveUpload();
+        };
+    }, []);
 
     const isUploading = phase === 'uploading' || phase === 'finalizing';
     const usedPct = Math.min((totalUsed / quotaLimit) * 100, 100);
@@ -107,12 +123,14 @@ export function UploadFormPanel({ totalUsed, quotaLimit, maxFileSize, onUploaded
         setProgress(0);
         setErrorMsg('');
 
+        let uploadId: string | null = null;
         try {
             const { cryptoKey, keyHex } = await CryptoService.generateKey();
             const chunks = Math.ceil(file.size / CHUNK_SIZE);
             setTotalChunks(chunks);
 
-            const uploadId = await FileService.init(file.size, chunks, password || undefined, expiresIn);
+            uploadId = await FileService.init(file.size, chunks, password || undefined, expiresIn);
+            activeUploadIdRef.current = uploadId;
 
             for (let i = 0; i < chunks; i++) {
                 setCurrentChunk(i + 1);
@@ -137,6 +155,8 @@ export function UploadFormPanel({ totalUsed, quotaLimit, maxFileSize, onUploaded
                 mimetype: file.type || 'application/octet-stream',
                 fileKey: keyHex,
             });
+            activeUploadIdRef.current = null;
+            uploadId = null;
 
             const shareLink = `${window.location.origin}/d/${fileId}?token=${shareToken}#${keyHex}`;
             navigator.clipboard.writeText(shareLink).catch(() => {});
@@ -151,6 +171,10 @@ export function UploadFormPanel({ totalUsed, quotaLimit, maxFileSize, onUploaded
                 setProgress(0);
             }, 2500);
         } catch (err: unknown) {
+            if (uploadId) {
+                activeUploadIdRef.current = null;
+                await FileService.cancelUpload(uploadId).catch(() => {});
+            }
             setErrorMsg(getUploadErrorMessage(err));
             setPhase('error');
         }

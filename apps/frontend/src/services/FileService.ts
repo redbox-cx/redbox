@@ -46,6 +46,23 @@ export const FileService = {
         return data.result;
     },
 
+    async cancelUpload(uploadId: string): Promise<void> {
+        await apiClient.delete(`/files/uploads/${encodeURIComponent(uploadId)}`);
+    },
+
+    cancelUploadOnPageExit(uploadId: string): void {
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+
+        const apiBase = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+        void fetch(`${apiBase}/files/uploads/${encodeURIComponent(uploadId)}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+            keepalive: true,
+            credentials: 'include',
+        }).catch(() => {});
+    },
+
     async getFiles(): Promise<{
         files: FileEntry[];
         totalUsed: number;
