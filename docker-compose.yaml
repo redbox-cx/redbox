@@ -45,6 +45,10 @@ services:
     environment:
       MINIO_ROOT_USER: "admin_redbox"
       MINIO_ROOT_PASSWORD: "SuperSecretMinioPassword123"
+      # Independent safety net when the browser, Redis or backend disappears.
+      # The backend normally removes inactive multipart uploads after one hour.
+      MINIO_API_STALE_UPLOADS_EXPIRY: "168h"
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: "1h"
     ports:
       - "9000:9000" # API Port (Backend)
       - "9001:9001" # Web-Interface Port (Browser)
