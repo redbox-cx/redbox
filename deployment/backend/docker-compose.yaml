@@ -76,10 +76,7 @@ services:
       - redbox_backend
 
   backend:
-    image: redbox-backend:latest
-    build:
-      context: ../..
-      dockerfile: deployment/Dockerfile.backend
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-backend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     restart: unless-stopped
     command: ["node", "dist/src/main"]
     env_file:
@@ -100,10 +97,7 @@ services:
       - redbox_backend
 
   admin-backend:
-    image: redbox-backend:latest
-    build:
-      context: ../..
-      dockerfile: deployment/Dockerfile.backend
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-backend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     restart: unless-stopped
     command: ["node", "dist/src/main-admin"]
     env_file:
@@ -136,7 +130,7 @@ services:
       - redbox_backend
 
   migrate:
-    image: redbox-backend:latest
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-backend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     profiles:
       - tools
     restart: "no"
@@ -151,7 +145,7 @@ services:
       - redbox_backend
 
   seed-admin:
-    image: redbox-backend:latest
+    image: ghcr.io/${GHCR_NAMESPACE:?set GHCR_NAMESPACE}/redbox-backend:${REDBOX_IMAGE_TAG:?set REDBOX_IMAGE_TAG}
     profiles:
       - tools
     restart: "no"
