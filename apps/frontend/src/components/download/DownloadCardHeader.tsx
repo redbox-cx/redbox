@@ -1,4 +1,4 @@
-type Stage = 'idle' | 'password' | 'downloading' | 'decrypting' | 'preview' | 'error';
+type Stage = 'idle' | 'password' | 'downloading' | 'finalizing' | 'complete' | 'error';
 
 function formatBytes(bytes: number): string {
     if (!bytes) return '';
@@ -8,7 +8,7 @@ function formatBytes(bytes: number): string {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${s[i]}`;
 }
 
-export function getIcon(mime: string): string {
+function getIcon(mime: string): string {
     if (mime.startsWith('image/')) return 'bi-file-image';
     if (mime.startsWith('video/')) return 'bi-file-play';
     if (mime.startsWith('audio/')) return 'bi-file-music';
@@ -36,8 +36,8 @@ export function DownloadCardHeader({ stage, fileName, mimeType, fileSize, onRepo
                 <h2 className="dl-file-name">{fileName || 'Encrypted File'}</h2>
                 <div className="dl-file-badges">
                     {fileSize > 0 && <span className="dl-badge">{formatBytes(fileSize)}</span>}
-                    <span className="dl-badge encrypted"><i className="bi bi-shield-lock-fill" /> End-to-end encrypted</span>
-                    {stage === 'preview' && (
+                    <span className="dl-badge encrypted"><i className="bi bi-shield-lock-fill" /> Client-side encrypted</span>
+                    {stage === 'complete' && (
                         <button className="dl-card-report-btn" onClick={onReport} title="Report content">
                             <i className="bi bi-flag" /> Report
                         </button>

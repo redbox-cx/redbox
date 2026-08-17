@@ -1,8 +1,7 @@
 import apiClient from '../api/apiClient';
+import { FILE_CHUNK_SIZE } from './FileCryptoFormat';
 
-export const CHUNK_SIZE = 50 * 1024 * 1024; // 50 MB
-// Each encrypted chunk = IV(12) + plaintext(CHUNK_SIZE) + GCM auth tag(16)
-export const ENCRYPTED_CHUNK_SIZE = CHUNK_SIZE + 12 + 16;
+export const CHUNK_SIZE = FILE_CHUNK_SIZE;
 
 export interface FileEntry {
     id: string;
@@ -25,13 +24,9 @@ export const FileService = {
 
     async uploadChunk(uploadId: string, chunkIndex: number, encryptedChunk: Uint8Array): Promise<void> {
         const form = new FormData();
-        const chunkBuffer =
-            encryptedChunk.buffer instanceof ArrayBuffer
-                ? encryptedChunk.buffer.slice(
-                    encryptedChunk.byteOffset,
-                    encryptedChunk.byteOffset + encryptedChunk.byteLength,
-                )
-                : new Uint8Array(encryptedChunk).buffer;
+        const chunkBuffer = encryptedChunk.byteOffset === 0 && encryptedChunk.byteLength === encryptedChunk.buffer.byteLength
+            ? encryptedChunk.buffer as ArrayBuffer
+            : encryptedChunk.slice().buffer as ArrayBuffer;
 
         form.append('file', new Blob([chunkBuffer], { type: 'application/octet-stream' }));
         form.append('chunkIndex', String(chunkIndex));

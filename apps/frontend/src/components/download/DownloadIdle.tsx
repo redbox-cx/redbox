@@ -1,16 +1,20 @@
 interface Props {
     onStart: () => void;
+    disabled?: boolean;
+    disabledLabel?: string;
+    notice?: string;
 }
 
-export function DownloadIdle({ onStart }: Props) {
+export function DownloadIdle({ onStart, disabled = false, disabledLabel, notice }: Props) {
     return (
         <div className="dl-idle">
             <p className="dl-description">
-                This file is encrypted. Only you (and whoever has this link) can decrypt it.
-                The key never leaves your browser.
+                This file was encrypted in the uploader's browser. It stays encrypted while downloading
+                and is decrypted chunk by chunk locally before being written to disk.
             </p>
-            <button className="dl-primary-btn" onClick={onStart}>
-                <i className="bi bi-cloud-arrow-down" /> Download & Decrypt
+            {notice && <div className="dl-error">{notice}</div>}
+            <button className="dl-primary-btn" onClick={onStart} disabled={disabled}>
+                <i className="bi bi-cloud-arrow-down" /> {disabled ? disabledLabel ?? 'Loading file...' : 'Download & Decrypt'}
             </button>
         </div>
     );

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { CryptoService } from '../../services/CryptoService';
 import { FileService, CHUNK_SIZE } from '../../services/FileService';
+import { createFileChunkAad } from '../../services/FileCryptoFormat';
 import { ExpiryDropdown } from '../bin/ExpiryDropdown';
 
 type UploadPhase = 'idle' | 'uploading' | 'finalizing' | 'done' | 'error';
@@ -23,9 +24,12 @@ function getFileIcon(mime: string): string {
     return 'bi-file-earmark';
 }
 
-function getUploadErrorMessage(err: any): string {
-    const status = err?.response?.status;
-    const rawMessage = err?.response?.data?.message ?? err?.message;
+function getUploadErrorMessage(err: unknown): string {
+    const error = err && typeof err === 'object'
+        ? err as { response?: { status?: unknown; data?: { message?: unknown } }; message?: unknown }
+        : null;
+    const status = error?.response?.status;
+    const rawMessage = error?.response?.data?.message ?? error?.message;
     const message = Array.isArray(rawMessage)
         ? rawMessage.find(msg => typeof msg === 'string' && msg.includes('2GB')) ?? rawMessage[0]
         : rawMessage;
@@ -114,7 +118,13 @@ export function UploadFormPanel({ totalUsed, quotaLimit, maxFileSize, onUploaded
                 setCurrentChunk(i + 1);
                 const start = i * CHUNK_SIZE;
                 const buf = await file.slice(start, Math.min(start + CHUNK_SIZE, file.size)).arrayBuffer();
-                const encrypted = await CryptoService.encryptChunk(cryptoKey, buf);
+                const encrypted = await CryptoService.encryptChunk(cryptoKey, buf, createFileChunkAad({
+                    fileSize: file.size,
+                    chunkSize: CHUNK_SIZE,
+                    totalChunks: chunks,
+                    chunkIndex: i,
+                    plaintextChunkLength: buf.byteLength,
+                }));
                 await FileService.uploadChunk(uploadId, i, encrypted);
                 setProgress(Math.round(((i + 1) / chunks) * 100));
             }
@@ -140,7 +150,7 @@ export function UploadFormPanel({ totalUsed, quotaLimit, maxFileSize, onUploaded
                 setExpiresIn('30d');
                 setProgress(0);
             }, 2500);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setErrorMsg(getUploadErrorMessage(err));
             setPhase('error');
         }
