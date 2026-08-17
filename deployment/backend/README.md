@@ -29,10 +29,20 @@ MINIO_ROOT_USER     should match S3_ACCESS_KEY unless you create a separate MinI
 MINIO_ROOT_PASSWORD should match S3_SECRET_KEY unless you create a separate MinIO key
 ```
 
-Build:
+Log in and pull the published application image:
 
 ```bash
-docker compose --env-file deployment/backend/.env -f deployment/backend/docker-compose.yaml build
+docker login ghcr.io
+docker compose --env-file deployment/backend/.env -f deployment/backend/docker-compose.yaml pull backend admin-backend
+```
+
+For an update, change only `REDBOX_IMAGE_TAG` to the full commit SHA emitted
+by the GitHub Actions workflow, then run:
+
+```bash
+docker compose --env-file deployment/backend/.env -f deployment/backend/docker-compose.yaml pull
+docker compose --env-file deployment/backend/.env -f deployment/backend/docker-compose.yaml --profile tools run --rm migrate
+docker compose --env-file deployment/backend/.env -f deployment/backend/docker-compose.yaml up -d
 ```
 
 Start data services:
