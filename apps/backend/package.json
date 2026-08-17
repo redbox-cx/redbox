@@ -4,6 +4,7 @@
   "description": "",
   "author": "",
   "private": true,
+  "packageManager": "pnpm@11.13.1",
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",

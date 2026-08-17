@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache openssl \
   && corepack enable
 
-COPY apps/backend/package.json apps/backend/pnpm-lock.yaml ./
+COPY apps/backend/package.json apps/backend/pnpm-lock.yaml apps/backend/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY apps/backend ./
@@ -22,7 +22,7 @@ WORKDIR /app
 RUN apk add --no-cache openssl \
   && corepack enable
 
-COPY --from=build /app/package.json /app/pnpm-lock.yaml ./
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/prisma ./prisma
 RUN pnpm install --frozen-lockfile && pnpm prisma generate
 COPY --from=build /app/dist ./dist
