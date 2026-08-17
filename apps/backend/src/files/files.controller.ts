@@ -1,7 +1,7 @@
 import { 
     Controller, Post, Patch, Delete, Get, 
     Body, UseGuards, UseInterceptors, UploadedFile, 
-    Param, Res, 
+    Param, Res, Header,
     Query,
     StreamableFile,
     BadRequestException,
@@ -87,8 +87,9 @@ export class FilesController {
             userId, 
             dto.uploadId, 
             dto.fileName, 
-            dto.mimetype,
-            dto.fileKey
+            dto.mimetype ?? 'application/octet-stream',
+            dto.fileKey,
+            dto.totalChunks,
         );
         
         return {
@@ -107,6 +108,51 @@ export class FilesController {
     }
 
     // download endpoint
+    @Get('download/:id/metadata')
+    @UseGuards(RateLimitGuard)
+    @Header('Cache-Control', 'private, no-store')
+    @RateLimit(
+        { name: 'files:download-metadata:ip', limit: 60, windowSeconds: 60, subject: 'ip' },
+        { name: 'files:download-metadata:file-ip', limit: 120, windowSeconds: 60 * 60, subject: 'param-ip', paramName: 'id' },
+    )
+    async downloadMetadata(
+        @Param('id') id: string,
+        @Query('token') token: string,
+        @Req() request: Request,
+    ) {
+        if (!token) throw new BadRequestException('Share token is required');
+        const result = await this.filesService.getDownloadMetadata(
+            id,
+            token,
+            undefined,
+            this.rateLimitService.getClientIp(request),
+        );
+        return { message: 'Download metadata fetched', result };
+    }
+
+    @Post('download/:id/metadata')
+    @UseGuards(RateLimitGuard)
+    @Header('Cache-Control', 'private, no-store')
+    @RateLimit(
+        { name: 'files:download-metadata:ip', limit: 60, windowSeconds: 60, subject: 'ip' },
+        { name: 'files:download-metadata:file-ip', limit: 120, windowSeconds: 60 * 60, subject: 'param-ip', paramName: 'id' },
+    )
+    async downloadMetadataWithPassword(
+        @Param('id') id: string,
+        @Query('token') token: string,
+        @Body() dto: DownloadFileDto,
+        @Req() request: Request,
+    ) {
+        if (!token) throw new BadRequestException('Share token is required');
+        const result = await this.filesService.getDownloadMetadata(
+            id,
+            token,
+            dto.password,
+            this.rateLimitService.getClientIp(request),
+        );
+        return { message: 'Download metadata fetched', result };
+    }
+
     @Get('download/:id')
     @UseGuards(RateLimitGuard)
     @RateLimit(
@@ -146,18 +192,41 @@ export class FilesController {
         password?: string,
     ) {
         if (!token) throw new BadRequestException('Share token is required');
-        const fileData = await this.filesService.downloadFile(
+        let fileData: Awaited<ReturnType<FilesService['downloadFile']>> | undefined;
+        let responseClosed = false;
+
+        res.once('close', () => {
+            responseClosed = true;
+            if (!res.writableEnded) {
+                fileData?.stream.destroy();
+            }
+        });
+
+        fileData = await this.filesService.downloadFile(
             id,
             token,
             password,
             this.rateLimitService.getClientIp(request),
         );
+        if (responseClosed || res.destroyed) {
+            fileData.stream.destroy();
+            return new StreamableFile(fileData.stream);
+        }
         // ASCII-safe fallback + RFC 5987 encoded name so browsers preserve the real filename
         const safeName = fileData.fileName.replace(/[^\w.\-]/g, '_');
         const encodedName = encodeURIComponent(fileData.fileName);
         res.set({
-            'Content-Type': fileData.mimeType,
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': String(fileData.encryptedSize),
             'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`,
+            'X-Redbox-Format': fileData.format,
+            'X-Redbox-Plaintext-Length': String(fileData.plaintextSize),
+            'X-Redbox-Chunk-Size': String(fileData.chunkSize),
+            'X-Redbox-Chunk-Count': String(fileData.chunkCount),
+            'X-Redbox-Encryption-Overhead': String(fileData.encryptionOverhead),
+            'X-Redbox-Mime-Type': encodeURIComponent(fileData.mimeType),
+            'Cache-Control': 'private, no-store, no-transform',
+            'X-Content-Type-Options': 'nosniff',
         });
 
         return new StreamableFile(fileData.stream);

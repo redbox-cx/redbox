@@ -10,7 +10,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import {
     S3Client, CreateMultipartUploadCommand, UploadPartCommand,
     CompleteMultipartUploadCommand, GetObjectCommand, DeleteObjectCommand,
-    ListObjectsV2Command, AbortMultipartUploadCommand
+    ListObjectsV2Command, AbortMultipartUploadCommand, HeadObjectCommand
 } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { memoryStorage } from 'multer';
@@ -21,11 +21,12 @@ import { getAdminForwardUsername } from 'src/common/mail/admin-mail-aliases';
 const MAX_ACTIVE_UPLOADS_PER_USER = 3;
 const UPLOAD_META_TTL_SECONDS = 86400;
 const DEFAULT_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024 - 1;
-const ADMIN_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 * 1024;
+const ADMIN_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024 * 1024;
 const DEFAULT_FILE_QUOTA_BYTES = 2 * 1024 * 1024 * 1024;
 const ADMIN_FILE_QUOTA_BYTES = 50 * 1024 * 1024 * 1024;
 const PLAINTEXT_CHUNK_SIZE_BYTES = 50 * 1024 * 1024;
 const ENCRYPTED_CHUNK_OVERHEAD_BYTES = 12 + 16;
+const FILE_ENCRYPTION_FORMAT = 'aes-gcm-chunked-v1-or-aad-v2';
 
 type UploadMeta = {
     totalChunks: number;
@@ -198,7 +199,7 @@ export class FilesService {
         return { message: `Chunk ${chunkIndex} accepted` };
     }
 
-    async finalizeUpload(userId: string, uploadId: string, fileName: string, mimetype: string, fileKeyFromFrontend: string) {
+    async finalizeUpload(userId: string, uploadId: string, fileName: string, mimetype: string, fileKeyFromFrontend: string, totalChunks: number) {
         const masterKey = await this.getMasterKeyForUser(userId);
 
         const fileKeyIv = randomBytes(16);
@@ -213,6 +214,9 @@ export class FilesService {
         if (meta.parts.length !== meta.totalChunks) {
             throw new BadRequestException('Not all chunks uploaded yet');
         }
+        if (totalChunks !== meta.totalChunks) {
+            throw new BadRequestException('Chunk count does not match initialized upload');
+        }
 
         let multipartCompleted = false;
         try {
@@ -225,6 +229,15 @@ export class FilesService {
                 },
             }));
             multipartCompleted = true;
+
+            const completedObject = await this.s3.send(new HeadObjectCommand({
+                Bucket: this.bucket,
+                Key: meta.storageKey,
+            }));
+            const expectedEncryptedSize = this.getExpectedEncryptedSize(meta.fileSize);
+            if (completedObject.ContentLength !== expectedEncryptedSize) {
+                throw new InternalServerErrorException('Stored file size validation failed');
+            }
 
             const fileRecord = await this.prisma.$transaction(async (tx) => {
                 await tx.$queryRaw<Array<{ id: string }>>`
@@ -294,42 +307,33 @@ export class FilesService {
         }
     }
 
+    async getDownloadMetadata(
+        fileId: string,
+        token: string,
+        providedPassword?: string,
+        clientIp = 'unknown',
+    ) {
+        const file = await this.getDownloadableFile(fileId, token);
+        await this.assertDownloadPassword(file, providedPassword, clientIp);
+        const plaintextSize = Number(file.size);
+        const chunkCount = Math.ceil(plaintextSize / PLAINTEXT_CHUNK_SIZE_BYTES);
+
+        return {
+            fileName: file.originalName,
+            mimeType: file.mimetype,
+            plaintextSize,
+            encryptedSize: this.getExpectedEncryptedSize(plaintextSize),
+            chunkSize: PLAINTEXT_CHUNK_SIZE_BYTES,
+            chunkCount,
+            encryptionOverhead: ENCRYPTED_CHUNK_OVERHEAD_BYTES,
+            format: FILE_ENCRYPTION_FORMAT,
+            passwordProtected: Boolean(file.passwordHash),
+        };
+    }
+
     async downloadFile(fileId: string, token: string, providedPassword?: string, clientIp = 'unknown') {
-        const file = await this.prisma.file.findUnique({ where: { id: fileId } });
-
-        if (!file || file.shareToken !== token) {
-            throw new NotFoundException('File not found or invalid token');
-        }
-
-        if (new Date() > file.expiresAt) {
-            await this.deleteFileInternal(file.id);
-            throw new NotFoundException('File has expired');
-        }
-
-        if (file.passwordHash) {
-            if (!providedPassword) throw new ForbiddenException('This file is password protected');
-            const passwordAttemptSubject = `file:${file.id}:ip:${clientIp}`;
-            await this.rateLimitService.assertAvailable(
-                'files:download:password-failure',
-                passwordAttemptSubject,
-                10,
-                15 * 60,
-            );
-            const isMatch = await bcrypt.compare(providedPassword, file.passwordHash);
-            if (!isMatch) {
-                await this.rateLimitService.consumeAttempt(
-                    'files:download:password-failure',
-                    passwordAttemptSubject,
-                    10,
-                    15 * 60,
-                );
-                throw new ForbiddenException('Incorrect password');
-            }
-            await this.rateLimitService.clearAttempts(
-                'files:download:password-failure',
-                passwordAttemptSubject,
-            );
-        }
+        const file = await this.getDownloadableFile(fileId, token);
+        await this.assertDownloadPassword(file, providedPassword, clientIp);
 
         const s3Response = await this.s3.send(new GetObjectCommand({
             Bucket: this.bucket,
@@ -338,10 +342,28 @@ export class FilesService {
 
         if (!s3Response.Body) throw new InternalServerErrorException('File not found in storage');
 
+        const stream = s3Response.Body as Readable;
+        const plaintextSize = Number(file.size);
+        const chunkCount = Math.ceil(plaintextSize / PLAINTEXT_CHUNK_SIZE_BYTES);
+        const encryptedSize = this.getExpectedEncryptedSize(plaintextSize);
+        if (s3Response.ContentLength !== encryptedSize) {
+            stream.destroy();
+            this.logger.error(
+                `Stored size mismatch for file ${file.id}: expected ${encryptedSize}, got ${s3Response.ContentLength ?? 'unknown'}`,
+            );
+            throw new InternalServerErrorException('Stored file size validation failed');
+        }
+
         return {
-            stream: s3Response.Body as Readable,
+            stream,
             fileName: file.originalName,
             mimeType: file.mimetype,
+            plaintextSize,
+            encryptedSize,
+            chunkSize: PLAINTEXT_CHUNK_SIZE_BYTES,
+            chunkCount,
+            encryptionOverhead: ENCRYPTED_CHUNK_OVERHEAD_BYTES,
+            format: FILE_ENCRYPTION_FORMAT,
         };
     }
 
@@ -443,6 +465,61 @@ export class FilesService {
         return `upload:meta:${userId}:${uploadId}`;
     }
 
+    private getExpectedEncryptedSize(plaintextSize: number) {
+        if (!Number.isSafeInteger(plaintextSize) || plaintextSize < 1 || plaintextSize > ADMIN_MAX_FILE_SIZE_BYTES) {
+            throw new InternalServerErrorException('Invalid stored file size');
+        }
+
+        const chunkCount = Math.ceil(plaintextSize / PLAINTEXT_CHUNK_SIZE_BYTES);
+        return plaintextSize + (chunkCount * ENCRYPTED_CHUNK_OVERHEAD_BYTES);
+    }
+
+    private async getDownloadableFile(fileId: string, token: string) {
+        const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+
+        if (!file || file.shareToken !== token) {
+            throw new NotFoundException('File not found or invalid token');
+        }
+
+        if (new Date() > file.expiresAt) {
+            await this.deleteFileInternal(file.id);
+            throw new NotFoundException('File has expired');
+        }
+
+        return file;
+    }
+
+    private async assertDownloadPassword(
+        file: { id: string; passwordHash: string | null },
+        providedPassword: string | undefined,
+        clientIp: string,
+    ) {
+        if (!file.passwordHash) return;
+        if (!providedPassword) throw new ForbiddenException('This file is password protected');
+
+        const passwordAttemptSubject = `file:${file.id}:ip:${clientIp}`;
+        await this.rateLimitService.assertAvailable(
+            'files:download:password-failure',
+            passwordAttemptSubject,
+            10,
+            15 * 60,
+        );
+        const isMatch = await bcrypt.compare(providedPassword, file.passwordHash);
+        if (!isMatch) {
+            await this.rateLimitService.consumeAttempt(
+                'files:download:password-failure',
+                passwordAttemptSubject,
+                10,
+                15 * 60,
+            );
+            throw new ForbiddenException('Incorrect password');
+        }
+        await this.rateLimitService.clearAttempts(
+            'files:download:password-failure',
+            passwordAttemptSubject,
+        );
+    }
+
     private getFileLimitsForUsername(username: string) {
         const adminUsername = getAdminForwardUsername();
         if (adminUsername && username === adminUsername) {
@@ -538,7 +615,9 @@ export class FilesService {
 
 export const storageConfig = {
     limits: {
-        fileSize: 100 * 1024 * 1024, 
+        // Busboy treats this limit as exclusive; +1 allows the exact valid
+        // frame size while handleChunk still rejects every larger payload.
+        fileSize: PLAINTEXT_CHUNK_SIZE_BYTES + ENCRYPTED_CHUNK_OVERHEAD_BYTES + 1,
     },
     storage: memoryStorage(),
 };

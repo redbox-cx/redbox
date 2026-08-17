@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Length, Matches, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
 
 export class CompleteUploadDto {
     @IsString()
@@ -15,11 +15,13 @@ export class CompleteUploadDto {
 
     @IsInt()
     @Min(1, {message: "At least 1 chunk is required"})
+    @Max(1024, {message: "You can't upload more than 1024 chunks at once"})
     totalChunks: number;
 
     @IsString()
     @IsOptional()
-    mimetype: string;
+    @Length(1, 100)
+    mimetype?: string;
 
     @IsString()
     @IsNotEmpty({message: "fileKey can't be empty"})

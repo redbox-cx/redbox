@@ -90,7 +90,16 @@ async function bootstrap() {
     origin: [process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
-    exposedHeaders: ['Content-Disposition'], 
+    exposedHeaders: [
+      'Content-Disposition',
+      'Content-Length',
+      'X-Redbox-Format',
+      'X-Redbox-Plaintext-Length',
+      'X-Redbox-Chunk-Size',
+      'X-Redbox-Chunk-Count',
+      'X-Redbox-Encryption-Overhead',
+      'X-Redbox-Mime-Type',
+    ],
   };
 
   app.enableCors(cors);

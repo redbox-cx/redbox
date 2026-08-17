@@ -1,7 +1,7 @@
 # redbox -- Backend API Documentation
 
-redbox is a high-security, zero-knowledge file-sharing platform.
-It allows users to upload large files (up to 10GB for the configured admin user) to a 10TB infrastructure,
+redbox is a client-side encrypted file-sharing platform.
+It allows users to upload large files (up to 50 GiB for the configured admin user) to a 10TB infrastructure,
 share them via secure links, and
 ensures data is automatically wiped after 30 days.
 
