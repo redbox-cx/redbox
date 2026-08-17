@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotFoundException, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotFoundException, Logger, UnauthorizedException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Redis } from 'ioredis';
@@ -10,7 +10,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import {
     S3Client, CreateMultipartUploadCommand, UploadPartCommand,
     CompleteMultipartUploadCommand, GetObjectCommand, DeleteObjectCommand,
-    ListObjectsV2Command, AbortMultipartUploadCommand, HeadObjectCommand
+    ListObjectsV2Command, AbortMultipartUploadCommand, HeadObjectCommand,
+    ListMultipartUploadsCommand, ListPartsCommand,
 } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import { memoryStorage } from 'multer';
@@ -18,8 +19,10 @@ import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
 import { createRequiredS3Client, requireBucket } from 'src/common/storage/s3-client';
 import { getAdminForwardUsername } from 'src/common/mail/admin-mail-aliases';
 
-const MAX_ACTIVE_UPLOADS_PER_USER = 3;
+const MAX_ACTIVE_UPLOADS_PER_USER = 1;
 const UPLOAD_META_TTL_SECONDS = 86400;
+const UPLOAD_INIT_LOCK_TTL_SECONDS = 120;
+const INCOMPLETE_UPLOAD_STALE_MS = 60 * 60 * 1000;
 const DEFAULT_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024 - 1;
 const ADMIN_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024 * 1024;
 const DEFAULT_FILE_QUOTA_BYTES = 2 * 1024 * 1024 * 1024;
@@ -38,6 +41,13 @@ type UploadMeta = {
     s3UploadId?: string;
     parts: Array<{ PartNumber: number; ETag?: string }>;
     createdAt?: number;
+    updatedAt?: number;
+};
+
+type UploadStorageIndex = {
+    metaKey: string;
+    activeKey: string;
+    uploadId: string;
 };
 
 type ActiveUploadCandidate = {
@@ -47,7 +57,7 @@ type ActiveUploadCandidate = {
 };
 
 @Injectable()
-export class FilesService {
+export class FilesService implements OnModuleInit {
     private readonly logger = new Logger(FilesService.name);
     private readonly s3: S3Client;
     private readonly bucket = requireBucket('S3_BUCKET_FILES');
@@ -58,6 +68,12 @@ export class FilesService {
         private readonly rateLimitService: RateLimitService,
     ) {
         this.s3 = createRequiredS3Client();
+    }
+
+    onModuleInit() {
+        // Storage maintenance must never delay API startup. It handles and logs
+        // its own errors and is also repeated by the scheduler/storage engine.
+        void this.cleanupStaleMultipartUploads();
     }
 
     private calculateExpiration(expiresIn?: string): Date {
@@ -105,6 +121,7 @@ export class FilesService {
         let uploadReserved = false;
         let uploadMetaCreated = false;
         const metaKey = this.getUploadMetaKey(userId, uploadId);
+        const initLockToken = await this.acquireUploadInitLock(userId);
 
         try {
             const s3Init = await this.s3.send(new CreateMultipartUploadCommand({
@@ -112,6 +129,9 @@ export class FilesService {
                 Key: storageKey,
             }));
             s3UploadId = s3Init.UploadId;
+            if (!s3UploadId) {
+                throw new InternalServerErrorException('Storage did not create a multipart upload');
+            }
 
             await this.redis.set(
                 metaKey,
@@ -125,10 +145,17 @@ export class FilesService {
                     s3UploadId,
                     parts: [],
                     createdAt: Date.now(),
+                    updatedAt: Date.now(),
                 } satisfies UploadMeta),
                 'EX', UPLOAD_META_TTL_SECONDS
             );
             uploadMetaCreated = true;
+
+            await this.setUploadStorageIndex(s3UploadId, {
+                metaKey,
+                activeKey: this.getActiveUploadKey(userId),
+                uploadId,
+            });
 
             await this.reserveActiveUpload(userId, uploadId);
             uploadReserved = true;
@@ -147,11 +174,19 @@ export class FilesService {
                 await this.redis.del(metaKey);
             }
 
+            if (s3UploadId) {
+                await this.redis.del(this.getUploadStorageIndexKey(s3UploadId));
+            }
+
             if (uploadReserved) {
                 await this.releaseActiveUpload(userId, uploadId);
             }
 
             throw error;
+        } finally {
+            await this.releaseUploadInitLock(userId, initLockToken).catch((error) => {
+                this.logger.warn(`Failed to release upload init lock: ${this.getErrorMessage(error)}`);
+            });
         }
     }
 
@@ -164,6 +199,7 @@ export class FilesService {
         if (!metaStr) throw new BadRequestException('Invalid or expired Upload ID');
 
         const meta = JSON.parse(metaStr) as UploadMeta;
+        if (!meta.s3UploadId) throw new BadRequestException('Invalid Upload ID');
 
         if (Number(chunkIndex) !== meta.nextExpectedChunk) {
             throw new BadRequestException(`Wrong chunk order. Expected index ${meta.nextExpectedChunk}`);
@@ -183,6 +219,9 @@ export class FilesService {
 
         const partNumber = chunkIndex + 1;
 
+        meta.updatedAt = Date.now();
+        await this.refreshUploadState(userId, uploadId, meta);
+
         const uploadResult = await this.s3.send(new UploadPartCommand({
             Bucket: this.bucket,
             Key: meta.storageKey,
@@ -191,10 +230,19 @@ export class FilesService {
             Body: file.buffer,
         }));
 
+        // A page-exit cancellation can race with an UploadPart request already in
+        // flight. If cancellation removed the state while S3 was accepting this
+        // part, abort once more so the late part cannot become an orphan.
+        if (!(await this.redis.exists(metaKey))) {
+            await this.abortMultipartUpload(meta.storageKey, meta.s3UploadId).catch(() => {});
+            throw new BadRequestException('Upload was cancelled');
+        }
+
         meta.parts.push({ PartNumber: partNumber, ETag: uploadResult.ETag });
         meta.nextExpectedChunk++;
+        meta.updatedAt = Date.now();
 
-        await this.redis.set(metaKey, JSON.stringify(meta), 'EX', UPLOAD_META_TTL_SECONDS);
+        await this.refreshUploadState(userId, uploadId, meta);
 
         return { message: `Chunk ${chunkIndex} accepted` };
     }
@@ -280,6 +328,9 @@ export class FilesService {
             });
 
             await this.redis.del(`upload:meta:${userId}:${uploadId}`);
+            if (meta.s3UploadId) {
+                await this.redis.del(this.getUploadStorageIndexKey(meta.s3UploadId));
+            }
             await this.releaseActiveUpload(userId, uploadId);
             return fileRecord;
 
@@ -299,6 +350,9 @@ export class FilesService {
 
             this.logger.error(`Finalize failed for uploadId ${uploadId}:`, error);
             await this.redis.del(this.getUploadMetaKey(userId, uploadId));
+            if (meta.s3UploadId) {
+                await this.redis.del(this.getUploadStorageIndexKey(meta.s3UploadId));
+            }
             await this.releaseActiveUpload(userId, uploadId);
             if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
                 throw error;
@@ -424,6 +478,84 @@ export class FilesService {
         }
     }
 
+    @Cron('*/10 * * * *')
+    async cleanupStaleMultipartUploads() {
+        const cutoff = Date.now() - INCOMPLETE_UPLOAD_STALE_MS;
+        let keyMarker: string | undefined;
+        let uploadIdMarker: string | undefined;
+        let abortedCount = 0;
+
+        try {
+            while (true) {
+                const page = await this.s3.send(new ListMultipartUploadsCommand({
+                    Bucket: this.bucket,
+                    KeyMarker: keyMarker,
+                    UploadIdMarker: uploadIdMarker,
+                }));
+
+                for (const upload of page.Uploads ?? []) {
+                    if (!upload.Key || !upload.UploadId) continue;
+
+                    try {
+                        const lastActivity = await this.getMultipartLastActivity(upload.Key, upload.UploadId, upload.Initiated);
+                        if (lastActivity > cutoff) continue;
+
+                        await this.abortMultipartUpload(upload.Key, upload.UploadId);
+                        await this.removeTrackedUploadState(upload.UploadId);
+                        abortedCount++;
+                        this.logger.warn(`Aborted stale multipart upload ${upload.UploadId} for ${upload.Key}`);
+                    } catch (error) {
+                        this.logger.warn(
+                            `Failed to inspect or abort multipart upload ${upload.UploadId}: ${this.getErrorMessage(error)}`,
+                        );
+                    }
+                }
+
+                if (!page.IsTruncated) break;
+                if (!page.NextKeyMarker) {
+                    this.logger.warn('Stopped multipart cleanup because storage returned no continuation marker');
+                    break;
+                }
+                keyMarker = page.NextKeyMarker;
+                uploadIdMarker = page.NextUploadIdMarker;
+            }
+
+            if (abortedCount > 0) {
+                this.logger.log(`Removed ${abortedCount} stale multipart upload(s)`);
+            }
+        } catch (error) {
+            this.logger.error(`Multipart cleanup failed: ${this.getErrorMessage(error)}`);
+        }
+    }
+
+    async cancelUpload(userId: string, uploadId: string) {
+        const metaKey = this.getUploadMetaKey(userId, uploadId);
+        const metaStr = await this.redis.get(metaKey);
+
+        if (!metaStr) {
+            await this.releaseActiveUpload(userId, uploadId);
+            return;
+        }
+
+        let meta: UploadMeta;
+        try {
+            meta = JSON.parse(metaStr) as UploadMeta;
+        } catch {
+            await this.redis.del(metaKey);
+            await this.releaseActiveUpload(userId, uploadId);
+            return;
+        }
+
+        if (meta.storageKey && meta.s3UploadId) {
+            await this.abortMultipartUpload(meta.storageKey, meta.s3UploadId);
+            await this.redis.del(this.getUploadStorageIndexKey(meta.s3UploadId));
+        }
+
+        await this.redis.del(metaKey);
+        await this.releaseActiveUpload(userId, uploadId);
+        this.logger.log(`Cancelled multipart upload ${uploadId} for user ${userId}`);
+    }
+
     private async deleteFileInternal(fileId: string) {
         const file = await this.prisma.file.findUnique({ where: { id: fileId } });
         if (file) {
@@ -463,6 +595,29 @@ export class FilesService {
 
     private getUploadMetaKey(userId: string, uploadId: string) {
         return `upload:meta:${userId}:${uploadId}`;
+    }
+
+    private getUploadStorageIndexKey(s3UploadId: string) {
+        return `upload:s3:${s3UploadId}`;
+    }
+
+    private async setUploadStorageIndex(s3UploadId: string, index: UploadStorageIndex) {
+        await this.redis.set(
+            this.getUploadStorageIndexKey(s3UploadId),
+            JSON.stringify(index),
+            'EX',
+            UPLOAD_META_TTL_SECONDS,
+        );
+    }
+
+    private async refreshUploadState(userId: string, uploadId: string, meta: UploadMeta) {
+        const transaction = this.redis.multi();
+        transaction.set(this.getUploadMetaKey(userId, uploadId), JSON.stringify(meta), 'EX', UPLOAD_META_TTL_SECONDS);
+        transaction.expire(this.getActiveUploadKey(userId), UPLOAD_META_TTL_SECONDS);
+        if (meta.s3UploadId) {
+            transaction.expire(this.getUploadStorageIndexKey(meta.s3UploadId), UPLOAD_META_TTL_SECONDS);
+        }
+        await transaction.exec();
     }
 
     private getExpectedEncryptedSize(plaintextSize: number) {
@@ -591,18 +746,105 @@ export class FilesService {
 
     private async abortActiveUpload(userId: string, candidate: ActiveUploadCandidate) {
         if (candidate.meta.s3UploadId && candidate.meta.storageKey) {
-            await this.s3.send(new AbortMultipartUploadCommand({
-                Bucket: this.bucket,
-                Key: candidate.meta.storageKey,
-                UploadId: candidate.meta.s3UploadId,
-            })).catch((err) => {
-                this.logger.warn(`Failed to abort replaced upload ${candidate.uploadId}: ${err.message}`);
-            });
+            await this.abortMultipartUpload(candidate.meta.storageKey, candidate.meta.s3UploadId);
+            await this.redis.del(this.getUploadStorageIndexKey(candidate.meta.s3UploadId));
         }
 
         await this.redis.del(this.getUploadMetaKey(userId, candidate.uploadId));
         await this.releaseActiveUpload(userId, candidate.uploadId);
         this.logger.log(`Replaced active upload ${candidate.uploadId} for user ${userId}`);
+    }
+
+    private async acquireUploadInitLock(userId: string) {
+        const token = uuidv4();
+        const acquired = await this.redis.set(
+            `upload:init-lock:${userId}`,
+            token,
+            'EX',
+            UPLOAD_INIT_LOCK_TTL_SECONDS,
+            'NX',
+        );
+
+        if (acquired !== 'OK') {
+            throw new ConflictException('Another upload is currently being initialized');
+        }
+
+        return token;
+    }
+
+    private async releaseUploadInitLock(userId: string, token: string) {
+        await this.redis.eval(
+            `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`,
+            1,
+            `upload:init-lock:${userId}`,
+            token,
+        );
+    }
+
+    private async getMultipartLastActivity(key: string, uploadId: string, initiated?: Date) {
+        const trackedState = await this.redis.get(this.getUploadStorageIndexKey(uploadId));
+        if (trackedState) {
+            try {
+                const index = JSON.parse(trackedState) as UploadStorageIndex;
+                const metaStr = await this.redis.get(index.metaKey);
+                if (metaStr) {
+                    const meta = JSON.parse(metaStr) as UploadMeta;
+                    const updatedAt = Number(meta.updatedAt ?? meta.createdAt);
+                    if (Number.isFinite(updatedAt)) return updatedAt;
+                }
+            } catch {
+                // Fall back to storage timestamps when Redis state is malformed.
+            }
+        }
+
+        let latest = initiated?.getTime() ?? 0;
+        let partNumberMarker: string | undefined;
+
+        do {
+            const page = await this.s3.send(new ListPartsCommand({
+                Bucket: this.bucket,
+                Key: key,
+                UploadId: uploadId,
+                PartNumberMarker: partNumberMarker,
+            }));
+
+            for (const part of page.Parts ?? []) {
+                latest = Math.max(latest, part.LastModified?.getTime() ?? 0);
+            }
+
+            partNumberMarker = page.IsTruncated ? page.NextPartNumberMarker : undefined;
+        } while (partNumberMarker);
+
+        return latest;
+    }
+
+    private async abortMultipartUpload(key: string, uploadId: string) {
+        await this.s3.send(new AbortMultipartUploadCommand({
+            Bucket: this.bucket,
+            Key: key,
+            UploadId: uploadId,
+        }));
+    }
+
+    private async removeTrackedUploadState(s3UploadId: string) {
+        const indexKey = this.getUploadStorageIndexKey(s3UploadId);
+        const indexStr = await this.redis.get(indexKey);
+        if (!indexStr) return;
+
+        try {
+            const index = JSON.parse(indexStr) as UploadStorageIndex;
+            await this.redis.multi()
+                .del(index.metaKey)
+                .srem(index.activeKey, index.uploadId)
+                .del(indexKey)
+                .exec();
+        } catch {
+            await this.redis.del(indexKey);
+        }
+    }
+
+    private getErrorMessage(error: unknown) {
+        return error instanceof Error ? error.message : String(error);
     }
 
     private async getMasterKeyForUser(userId: string) {

@@ -5,7 +5,8 @@ import {
     Query,
     StreamableFile,
     BadRequestException,
-    Req
+    Req,
+    ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService, storageConfig } from './files.service';
@@ -20,6 +21,7 @@ import { RateLimit } from 'src/common/rate-limit/rate-limit.decorators';
 import { RateLimitGuard } from 'src/common/rate-limit/rate-limit.guard';
 import { RateLimitService } from 'src/common/rate-limit/rate-limit.service';
 import type { Request } from 'express';
+import { UploadChunkConcurrencyGuard } from './upload-chunk-concurrency.guard';
 
 @Controller('files')
 export class FilesController {
@@ -63,8 +65,8 @@ export class FilesController {
 
     // send chunks
     @Patch('upload/:uploadId')
-    @UseGuards(JwtAuthGuard, RateLimitGuard)
-    @RateLimit({ name: 'files:upload:user-upload', limit: 300, windowSeconds: 60 * 60, subject: 'param-user', paramName: 'uploadId' })
+    @UseGuards(JwtAuthGuard, RateLimitGuard, UploadChunkConcurrencyGuard)
+    @RateLimit({ name: 'files:upload:user-upload', limit: 1100, windowSeconds: 24 * 60 * 60, subject: 'param-user', paramName: 'uploadId' })
     @UseInterceptors(FileInterceptor('file', storageConfig))
     async uploadChunk(
         @GetUserId() userId: string,
@@ -96,6 +98,17 @@ export class FilesController {
             message: 'File successfully processed',
             result: { fileId: file.id, shareToken: file.shareToken }
         };
+    }
+
+    @Delete('uploads/:uploadId')
+    @UseGuards(JwtAuthGuard, RateLimitGuard)
+    @RateLimit({ name: 'files:cancel-upload:user', limit: 60, windowSeconds: 60 * 60, subject: 'user' })
+    async cancelUpload(
+        @GetUserId() userId: string,
+        @Param('uploadId', new ParseUUIDPipe()) uploadId: string,
+    ) {
+        await this.filesService.cancelUpload(userId, uploadId);
+        return { message: 'Upload cancelled' };
     }
 
     // delete endpoint
