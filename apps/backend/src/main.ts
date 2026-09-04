@@ -8,7 +8,7 @@ import { json, urlencoded } from 'express';
 import { PrismaService } from './prisma.service';
 import { startMainAppDashboardTelemetry } from './common/dashboard/runtime-tracker';
 import { timingSafeEqual } from 'crypto';
-import { requireEnv } from './common/config/env';
+import { envOriginList, requireEnv } from './common/config/env';
 
 function isValidSecret(input: string | string[] | undefined, expected: string) {
   if (typeof input !== 'string') {
@@ -87,7 +87,7 @@ async function bootstrap() {
 
 
   const cors = {
-    origin: [process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173'],
+    origin: envOriginList('FRONTEND_ORIGIN', ['http://localhost:5173']),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     exposedHeaders: [

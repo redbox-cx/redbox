@@ -8,6 +8,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { PrismaService } from './prisma.service';
 import { startServiceRuntimeHeartbeat } from './common/dashboard/runtime-tracker';
 import { ServiceRuntimeName } from '@prisma/client';
+import { envOriginList } from './common/config/env';
 
 async function bootstrap() {
   const app = await NestFactory.create(AdminModule, {
@@ -42,7 +43,7 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   app.enableCors({
-    origin: [process.env.ADMIN_FRONTEND_ORIGIN ?? 'http://localhost:5174'],
+    origin: envOriginList('ADMIN_FRONTEND_ORIGIN', ['http://localhost:5174']),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     exposedHeaders: ['Content-Disposition'],
