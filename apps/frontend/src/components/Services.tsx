@@ -23,7 +23,7 @@ const servicesData: Service[] = [
     {
         title: "Email Inbox",
         icon: mailIcon,
-        description: "A read-only inbox built into your Redbox account. You can receive and read emails — sending isn't supported. Routing is handled through Cloudflare, nothing fancy.",
+        description: "A read-only email inbox built into your Redbox account. You can receive and read emails, sending emails isn't supported. Routing is handled through Cloudflare.",
         path: "/about/mail"
     },
     {
@@ -83,10 +83,10 @@ export function Services() {
                             <img src={service.icon} alt={service.title} className="service-icon-img" />
                         </div>
                         <h3 className="service-title">{service.title}</h3>
+                        <p className="service-description">{service.description}</p>
                         {service.comingSoon && (
                             <span className="service-badge">Coming soon</span>
                         )}
-                        <p className="service-description">{service.description}</p>
                         <Link to={service.path} className="service-open-btn">Open</Link>
                     </motion.div>
                 ))}

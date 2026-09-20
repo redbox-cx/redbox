@@ -58,7 +58,7 @@ export function MailPublicPage() {
                             variants={fadeUp}
                             transition={{ duration: 0.7, ease: "easeOut" }}
                         >
-                            A read-only inbox built into your Redbox account. You can receive and read emails — sending isn't supported. Routing is handled through Cloudflare, nothing fancy.
+                            A read-only email inbox built into your Redbox account. You can receive and read emails, sending emails isn't supported. Routing is handled through Cloudflare.
                         </motion.p>
 
                         <motion.div
