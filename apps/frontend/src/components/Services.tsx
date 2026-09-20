@@ -4,17 +4,26 @@ import securesphereIcon from "@/assets/svg/securesphere-logo.svg"
 import mailIcon from "@/assets/svg/mail-logo.svg"
 import toolsetIcon from "@/assets/svg/toolset-logo.svg"
 
-const servicesData = [
+type Service = {
+    title: string;
+    icon: string;
+    description: string;
+    path: string;
+    comingSoon?: boolean;
+};
+
+const servicesData: Service[] = [
     {
         title: "SecureSphere",
         icon: securesphereIcon,
         description: "A web-based chat platform for secure and private communication. Using end-to-end encryption, it ensures only intended recipients can read messages with minimal server data storage.",
-        path: "/about/securesphere"
+        path: "/about/securesphere",
+        comingSoon: true
     },
     {
-        title: "Email Service",
+        title: "Email Inbox",
         icon: mailIcon,
-        description: "Currently providing email routing via Cloudflare, with plans to transition to a fully self-hosted, private email solution in the near future.",
+        description: "A read-only email inbox built into your Redbox account. You can receive and read emails, sending emails isn't supported. Routing is handled through Cloudflare.",
         path: "/about/mail"
     },
     {
@@ -75,6 +84,9 @@ export function Services() {
                         </div>
                         <h3 className="service-title">{service.title}</h3>
                         <p className="service-description">{service.description}</p>
+                        {service.comingSoon && (
+                            <span className="service-badge">Coming soon</span>
+                        )}
                         <Link to={service.path} className="service-open-btn">Open</Link>
                     </motion.div>
                 ))}

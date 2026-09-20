@@ -58,7 +58,7 @@ export function MailPublicPage() {
                             variants={fadeUp}
                             transition={{ duration: 0.7, ease: "easeOut" }}
                         >
-                            A read-only inbox built into your Redbox account. You can receive and read emails — sending isn't supported yet. Routing is handled through Cloudflare, nothing fancy.
+                            A read-only email inbox built into your Redbox account. You can receive and read emails, sending emails isn't supported. Routing is handled through Cloudflare.
                         </motion.p>
 
                         <motion.div
@@ -85,7 +85,7 @@ export function MailPublicPage() {
                     <section className="mail-pub-row">
                         <div className="mail-pub-text">
                             <h2 className="mail-pub-title">What it is</h2>
-                            <p>It's a read-only inbox — you can receive and read emails, but outgoing mail isn't supported yet. Routing goes through Cloudflare, so it's not fully self-hosted either.</p>
+                            <p>It's a read-only inbox — you can receive and read emails, but outgoing mail isn't supported. Routing goes through Cloudflare, so it's not fully self-hosted.</p>
                             <p>It's already available inside your Redbox dashboard if you have an account. No extra setup, just open it and it works.</p>
                         </div>
                         <div className="mail-pub-visual">
